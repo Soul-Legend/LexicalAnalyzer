@@ -1,4 +1,4 @@
-from gui import LexerGeneratorApp # Assuming gui.py contains LexerGeneratorApp
+from gui import LexerGeneratorApp
 
 if __name__ == "__main__":
     app = LexerGeneratorApp()
