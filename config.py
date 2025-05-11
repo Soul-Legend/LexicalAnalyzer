@@ -1,0 +1,2 @@
+EPSILON = '&'
+CONCAT_OP = '.'
