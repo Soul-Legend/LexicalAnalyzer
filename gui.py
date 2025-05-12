@@ -18,16 +18,14 @@ class LexerGeneratorApp(ctk.CTk):
 
         self.title("T1 Formais: Gerador de Analisadores Léxicos")
         self.geometry("1300x850")
-        ctk.set_appearance_mode("System") # "System", "Dark", "Light"
-        ctk.set_default_color_theme("blue") # "blue", "green", "dark-blue"
+        ctk.set_appearance_mode("System")
+        ctk.set_default_color_theme("blue")
 
-        # Define some fonts for consistent styling
         self.font_title = ctk.CTkFont(family="Roboto", size=36, weight="bold")
         self.font_subtitle = ctk.CTkFont(family="Roboto", size=20, weight="normal")
         self.font_credits = ctk.CTkFont(family="Roboto", size=16, slant="italic")
         self.font_button = ctk.CTkFont(family="Roboto", size=16, weight="bold")
         self.font_small_button = ctk.CTkFont(family="Roboto", size=14)
-
 
         self.definitions = {}
         self.pattern_order = []
@@ -41,7 +39,7 @@ class LexerGeneratorApp(ctk.CTk):
         self.lexer = None
         self.current_test_name = "Manual"
 
-        self.container = ctk.CTkFrame(self, fg_color="transparent") # Make container transparent
+        self.container = ctk.CTkFrame(self, fg_color="transparent")
         self.container.pack(side="top", fill="both", expand=True)
         self.container.grid_rowconfigure(0, weight=1)
         self.container.grid_columnconfigure(0, weight=1)
@@ -58,11 +56,9 @@ class LexerGeneratorApp(ctk.CTk):
     def show_frame(self, frame_name):
         if self.current_frame_name and self.current_frame_name in self.frames:
             current_frame_obj = self.frames[self.current_frame_name]
-            current_frame_obj.pack_forget() # Use pack_forget if children use pack
-            # current_frame_obj.grid_remove() # Use grid_remove if children use grid
+            current_frame_obj.pack_forget()
 
         frame = self.frames[frame_name]
-        # Use pack for the main frames within the container for easier centering
         frame.pack(pady=20, padx=20, fill="both", expand=True)
         self.current_frame_name = frame_name
         
@@ -70,19 +66,16 @@ class LexerGeneratorApp(ctk.CTk):
             widgets = self.get_current_mode_widgets()
             if widgets and widgets.get("re_input_textbox") and \
                not widgets["re_input_textbox"].get("1.0", "end-1c").strip() and TEST_CASES:
-                self.load_test_data_for_auto_mode(TEST_CASES[0], show_message=False) # Don't show popup on initial load
+                self.load_test_data_for_auto_mode(TEST_CASES[0], show_message=False)
 
     def _create_start_screen(self):
-        """Creates the redesigned professional start screen."""
-        frame = ctk.CTkFrame(self.container, fg_color=("gray90", "gray10")) # Slightly different bg for start
+        frame = ctk.CTkFrame(self.container, fg_color=("gray90", "gray10")) 
         self.frames["StartScreen"] = frame
-        # frame.pack_propagate(False) # Prevent frame from shrinking to content, let it fill
 
-        # --- Top Section: Title ---
         title_frame = ctk.CTkFrame(frame, fg_color="transparent")
-        title_frame.pack(pady=(max(self.winfo_height() // 7, 60), 20), padx=20, fill="x") # Dynamic padding top
+        title_frame.pack(pady=(max(self.winfo_height() // 7, 60), 20), padx=20, fill="x")
 
-        app_icon_label = ctk.CTkLabel(title_frame, text="🛠️", font=("Segoe UI Emoji", 48)) # Example icon
+        app_icon_label = ctk.CTkLabel(title_frame, text="🛠️", font=("Segoe UI Emoji", 48))
         app_icon_label.pack(side="left", padx=(0, 20))
 
         title_text_frame = ctk.CTkFrame(title_frame, fg_color="transparent")
@@ -91,15 +84,14 @@ class LexerGeneratorApp(ctk.CTk):
         ctk.CTkLabel(title_text_frame, text="Analisador Léxico", font=self.font_title, anchor="w").pack(fill="x")
         ctk.CTkLabel(title_text_frame, text="Trabalho 1 - Linguagens Formais e Compiladores", font=self.font_subtitle, anchor="w", text_color=("gray30", "gray70")).pack(fill="x")
 
-        # --- Middle Section: Mode Selection Buttons ---
         buttons_frame = ctk.CTkFrame(frame, fg_color="transparent")
         buttons_frame.pack(pady=40, padx=80, fill="x")
-        buttons_frame.grid_columnconfigure((0,1), weight=1) # Make buttons expand
+        buttons_frame.grid_columnconfigure((0,1), weight=1)
 
         manual_button = ctk.CTkButton(buttons_frame, text="📝 Modo Manual",
                                       command=lambda: self.show_frame("ManualMode"),
                                       height=70, font=self.font_button,
-                                      hover_color=ctk.ThemeManager.theme["CTkButton"]["fg_color"]) # Keep original on hover
+                                      hover_color=ctk.ThemeManager.theme["CTkButton"]["fg_color"]) 
         manual_button.grid(row=0, column=0, padx=15, pady=15, sticky="ew")
 
         auto_button = ctk.CTkButton(buttons_frame, text="⚙️ Modo Automático (Testes)",
@@ -108,7 +100,6 @@ class LexerGeneratorApp(ctk.CTk):
                                     hover_color=ctk.ThemeManager.theme["CTkButton"]["fg_color"])
         auto_button.grid(row=0, column=1, padx=15, pady=15, sticky="ew")
 
-        # --- Bottom Section: Credits and Exit ---
         bottom_frame = ctk.CTkFrame(frame, fg_color="transparent")
         bottom_frame.pack(side="bottom", pady=(20, max(self.winfo_height() // 10, 40)), padx=20, fill="x")
 
@@ -123,57 +114,71 @@ class LexerGeneratorApp(ctk.CTk):
                                     hover_color=("gray85", "gray20"))
         exit_button.pack()
 
-
     def _create_shared_controls_and_display(self, parent_frame):
-        # ... (This method remains the same as the previous version)
         widgets = {}
-        # Ensure the parent_frame (ManualMode or AutoTestMode main frame) uses grid
         parent_frame.grid_columnconfigure(0, weight=1, minsize=420) 
         parent_frame.grid_columnconfigure(1, weight=3)             
         parent_frame.grid_rowconfigure(0, weight=1)
 
-        control_frame = ctk.CTkFrame(parent_frame)
-        control_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-        widgets["control_frame"] = control_frame
+        # ***** MODIFICATION START *****
+        # Create a CTkScrollableFrame for the entire control panel content
+        outer_control_frame = ctk.CTkScrollableFrame(parent_frame, label_text="Controles e Definições")
+        outer_control_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        # The 'widgets["control_frame"]' will now refer to this scrollable frame
+        # or an inner static frame if you prefer more structure.
+        # For simplicity, we'll pack directly into outer_control_frame.
+        widgets["control_frame"] = outer_control_frame 
+        # All subsequent .pack() calls for controls will be on this scrollable frame.
+        # ***** MODIFICATION END *****
 
-        ctk.CTkLabel(control_frame, text="1. Definições Regulares:", font=("Arial", 13, "bold")).pack(pady=(10,2), padx=10, anchor="w")
-        re_input_textbox = ctk.CTkTextbox(control_frame, height=200, font=("Consolas", 11))
-        re_input_textbox.pack(pady=2, padx=10, fill="x", expand=False)
+
+        ctk.CTkLabel(outer_control_frame, text="1. Definições Regulares:", font=("Arial", 13, "bold")).pack(pady=(10,2), padx=10, anchor="w", fill="x")
+        re_input_textbox = ctk.CTkTextbox(outer_control_frame, height=200, font=("Consolas", 11))
+        re_input_textbox.pack(pady=2, padx=10, fill="x", expand=False) # expand=False is important for textboxes in scrollable frames
         widgets["re_input_textbox"] = re_input_textbox
         
-        load_re_file_button = ctk.CTkButton(control_frame, text="Carregar Definições de Arquivo", command=self.load_re_from_file_for_current_mode)
+        load_re_file_button = ctk.CTkButton(outer_control_frame, text="Carregar Definições de Arquivo", command=self.load_re_from_file_for_current_mode)
         load_re_file_button.pack(pady=5, padx=10, fill="x")
         widgets["load_re_file_button"] = load_re_file_button
 
-        process_re_button = ctk.CTkButton(control_frame, text="A. Processar REs ➔ NFAs", command=self.process_regular_expressions)
+        process_re_button = ctk.CTkButton(outer_control_frame, text="A. Processar REs ➔ NFAs", command=self.process_regular_expressions)
         process_re_button.pack(pady=(10,3), padx=10, fill="x")
         widgets["process_re_button"] = process_re_button
 
-        combine_nfas_button = ctk.CTkButton(control_frame, text="B. Unir NFAs (ε)", command=self.combine_all_nfas, state="disabled")
+        combine_nfas_button = ctk.CTkButton(outer_control_frame, text="B. Unir NFAs (ε)", command=self.combine_all_nfas, state="disabled")
         combine_nfas_button.pack(pady=3, padx=10, fill="x")
         widgets["combine_nfas_button"] = combine_nfas_button
 
-        generate_dfa_button = ctk.CTkButton(control_frame, text="C. Determinizar NFA ➔ AFD", command=self.generate_dfa_from_nfa, state="disabled")
+        generate_dfa_button = ctk.CTkButton(outer_control_frame, text="C. Determinizar NFA ➔ AFD", command=self.generate_dfa_from_nfa, state="disabled")
         generate_dfa_button.pack(pady=3, padx=10, fill="x")
         widgets["generate_dfa_button"] = generate_dfa_button
         
-        save_dfa_button = ctk.CTkButton(control_frame, text="Salvar Tabela AFD (Anexo II)", command=self.save_dfa_to_file, state="disabled")
+        save_dfa_button = ctk.CTkButton(outer_control_frame, text="Salvar Tabela AFD (Anexo II)", command=self.save_dfa_to_file, state="disabled")
         save_dfa_button.pack(pady=(3,10), padx=10, fill="x")
         widgets["save_dfa_button"] = save_dfa_button
 
-        ctk.CTkLabel(control_frame, text="2. Texto Fonte para Análise:", font=("Arial", 13, "bold")).pack(pady=(10,2), padx=10, anchor="w")
-        source_code_input_textbox = ctk.CTkTextbox(control_frame, height=150, font=("Consolas", 11))
+        ctk.CTkLabel(outer_control_frame, text="2. Texto Fonte para Análise:", font=("Arial", 13, "bold")).pack(pady=(10,2), padx=10, anchor="w", fill="x")
+        source_code_input_textbox = ctk.CTkTextbox(outer_control_frame, height=150, font=("Consolas", 11))
         source_code_input_textbox.pack(pady=2, padx=10, fill="x", expand=False)
         widgets["source_code_input_textbox"] = source_code_input_textbox
 
-        tokenize_button = ctk.CTkButton(control_frame, text="Analisar Texto Fonte (Gerar Tokens)", command=self.tokenize_source, state="disabled")
+        tokenize_button = ctk.CTkButton(outer_control_frame, text="Analisar Texto Fonte (Gerar Tokens)", command=self.tokenize_source, state="disabled")
         tokenize_button.pack(pady=5, padx=10, fill="x")
         widgets["tokenize_button"] = tokenize_button
         
-        back_button = ctk.CTkButton(control_frame, text="Voltar à Tela Inicial", command=lambda: self.show_frame("StartScreen"))
-        back_button.pack(pady=(20,10), padx=10, fill="x")
-        widgets["back_button"] = back_button
+        # The "Selecionar Teste Automático" section will be added specifically in _create_auto_test_mode_frame
+        # It will also be packed into this outer_control_frame (scrollable)
 
+        # Back to Start Screen Button needs to be accessible even when scrolled
+        # So, it's better to pack it into parent_frame's control_frame directly if it's static,
+        # or at the very bottom of the scrollable area.
+        # For now, let's keep it inside the scrollable area.
+        back_button = ctk.CTkButton(outer_control_frame, text="Voltar à Tela Inicial", command=lambda: self.show_frame("StartScreen"))
+        back_button.pack(pady=(20,10), padx=10, fill="x") # Will be at the bottom of scrollable content
+        widgets["back_button"] = back_button # Though it's inside, reference is still useful
+
+
+        # --- Display Frame (Right) with Tabs --- (This part is outside the scrollable control frame)
         display_tab_view = ctk.CTkTabview(parent_frame) 
         display_tab_view.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
         widgets["display_tab_view"] = display_tab_view
@@ -191,33 +196,49 @@ class LexerGeneratorApp(ctk.CTk):
         return widgets
 
     def _create_manual_mode_frame(self):
-        # ... (This method remains the same)
         frame = ctk.CTkFrame(self.container)
         self.frames["ManualMode"] = frame
         self.manual_mode_widgets = self._create_shared_controls_and_display(frame)
+        # No specific additions for manual mode's control panel here, already handled by shared.
         self.manual_mode_widgets["re_input_textbox"].insert("0.0", "# Defina suas expressões regulares aqui, uma por linha.\n# Ex: ID: [a-z]+\n# Ex: NUM: [0-9]+\n# Ex: WS: [ ]+ %ignore\n")
         self.manual_mode_widgets["source_code_input_textbox"].insert("0.0", "// Digite o código fonte para testar aqui.")
 
+
     def _create_auto_test_mode_frame(self):
-        # ... (This method remains the same)
         frame = ctk.CTkFrame(self.container)
         self.frames["AutoTestMode"] = frame
-        self.auto_test_mode_widgets = self._create_shared_controls_and_display(frame)
+        # _create_shared_controls_and_display returns a dict including the scrollable 'control_frame'
+        self.auto_test_mode_widgets = self._create_shared_controls_and_display(frame) 
         
-        auto_control_frame = self.auto_test_mode_widgets["control_frame"]
+        # Get the scrollable control frame to add auto-test specific widgets
+        scrollable_control_panel = self.auto_test_mode_widgets["control_frame"] 
         
-        ctk.CTkLabel(auto_control_frame, text="3. Selecionar Teste Automático:", font=("Arial", 13, "bold")).pack(pady=(15,5), padx=10, anchor="w", before=self.auto_test_mode_widgets["back_button"])
+        # The "Voltar à Tela Inicial" button is already packed at the end by _create_shared_controls_and_display
+        # We need to insert the test selection widgets *before* it.
+        # To do this, we can temporarily forget the back button, pack new things, then re-pack back button.
+        back_button_ref = self.auto_test_mode_widgets.get("back_button")
+        if back_button_ref:
+            back_button_ref.pack_forget()
 
-        scrollable_test_frame = ctk.CTkScrollableFrame(auto_control_frame, height=100) 
-        scrollable_test_frame.pack(pady=5, padx=10, fill="x", before=self.auto_test_mode_widgets["back_button"])
+        ctk.CTkLabel(scrollable_control_panel, text="3. Selecionar Teste Automático:", font=("Arial", 13, "bold")).pack(pady=(15,5), padx=10, anchor="w", fill="x")
+
+        # This scrollable frame for test buttons will be *inside* the main scrollable control panel
+        # which might be a bit much, but let's try. Max height for this inner scroll.
+        inner_scrollable_test_buttons = ctk.CTkScrollableFrame(scrollable_control_panel, height=120) 
+        inner_scrollable_test_buttons.pack(pady=5, padx=10, fill="x")
 
         for i, test_case in enumerate(TEST_CASES):
-            btn = ctk.CTkButton(scrollable_test_frame, text=f"Carregar: {test_case['name']}",
+            btn = ctk.CTkButton(inner_scrollable_test_buttons, text=f"Carregar: {test_case['name']}",
                                 command=lambda tc=test_case: self.load_test_data_for_auto_mode(tc))
             btn.pack(pady=3, fill="x")
         
+        if back_button_ref: # Re-pack the back button at the very end of the scrollable content
+            back_button_ref.pack(pady=(20,10), padx=10, fill="x")
+
+
+    # ... (rest of the methods: get_current_mode_widgets, _update_text_content, _update_display, etc.
+    #      should remain the same as your provided version)
     def get_current_mode_widgets(self):
-        # ... (This method remains the same)
         if self.current_frame_name == "ManualMode":
             return self.manual_mode_widgets
         elif self.current_frame_name == "AutoTestMode":
@@ -225,14 +246,12 @@ class LexerGeneratorApp(ctk.CTk):
         return None
 
     def _update_text_content(self, textbox_widget, content):
-        # ... (This method remains the same)
         textbox_widget.configure(state="normal")
         textbox_widget.delete("1.0", "end")
         textbox_widget.insert("1.0", content)
         textbox_widget.configure(state="disabled")
 
     def _update_display(self, tab_key_name, content_str):
-        # ... (This method remains the same)
         widgets = self.get_current_mode_widgets()
         if not widgets or "textboxes_map" not in widgets: return 
         textbox = widgets["textboxes_map"].get(tab_key_name)
@@ -240,14 +259,12 @@ class LexerGeneratorApp(ctk.CTk):
             self._update_text_content(textbox, content_str) 
 
     def _set_re_definitions_for_current_mode(self, content):
-        # ... (This method remains the same)
         widgets = self.get_current_mode_widgets()
         if not widgets: return
         self._update_text_content(widgets["re_input_textbox"], content)
         self.reset_app_state()
 
     def _set_source_code_for_current_mode(self, content):
-        # ... (This method remains the same)
         widgets = self.get_current_mode_widgets()
         if not widgets: return
         self._update_text_content(widgets["source_code_input_textbox"], content) 
@@ -255,7 +272,6 @@ class LexerGeneratorApp(ctk.CTk):
              self._update_display("Tokens Gerados", f"({self.current_test_name}: Texto fonte alterado, reanalisar)")
     
     def load_re_from_file_for_current_mode(self):
-        # ... (This method remains the same)
         widgets = self.get_current_mode_widgets()
         if not widgets: return
         filepath = filedialog.askopenfilename(title="Carregar Definições Regulares", filetypes=(("Text files", "*.txt"), ("RE files", "*.re"), ("All files", "*.*")))
@@ -267,22 +283,18 @@ class LexerGeneratorApp(ctk.CTk):
                 messagebox.showinfo("Sucesso", f"Arquivo '{filepath.split('/')[-1]}' carregado para {self.current_frame_name}.")
             except Exception as e: messagebox.showerror("Erro ao Ler Arquivo", str(e))
 
-    def load_test_data_for_auto_mode(self, test_case, show_message=True): # Added show_message flag
-        # ... (Modified to use show_message)
+    def load_test_data_for_auto_mode(self, test_case, show_message=True):
         if self.current_frame_name != "AutoTestMode":
-             # This should ideally not happen if called from auto mode buttons.
-             # If called programmatically (e.g., on startup), ensure the frame is shown first.
-             self.show_frame("AutoTestMode") # Ensure we are in auto mode
+             self.show_frame("AutoTestMode")
         
         self._set_re_definitions_for_current_mode(test_case["re_definitions"])
         self._set_source_code_for_current_mode(test_case["source_code"])
         self.current_test_name = test_case["name"]
         
-        if show_message: # Only show message if triggered by user click, not initial load
-            messagebox.showinfo("Teste Carregado", f"Teste '{test_case['name']}' carregado no Modo Automático.")
+        if show_message and hasattr(self, 'auto_test_mode_widgets') and self.auto_test_mode_widgets["control_frame"].winfo_ismapped():
+             messagebox.showinfo("Teste Carregado", f"Teste '{test_case['name']}' carregado no Modo Automático.")
 
     def reset_app_state(self):
-        # ... (This method remains the same)
         self.definitions.clear()
         self.pattern_order.clear()
         self.reserved_words_defs.clear()
@@ -300,7 +312,6 @@ class LexerGeneratorApp(ctk.CTk):
         widgets["tokenize_button"].configure(state="disabled")
 
     def process_regular_expressions(self):
-        # ... (This method remains the same)
         widgets = self.get_current_mode_widgets()
         if not widgets: return
         re_content = widgets["re_input_textbox"].get("1.0", "end-1c").strip()
@@ -330,7 +341,7 @@ class LexerGeneratorApp(ctk.CTk):
                 if widgets.get("combine_nfas_button"): widgets["combine_nfas_button"].configure(state="normal")
             else:
                 if widgets.get("combine_nfas_button"): widgets["combine_nfas_button"].configure(state="disabled")
-            if widgets.get("generate_dfa_button"): widgets["generate_dfa_button"].configure(state="disabled") # etc.
+            if widgets.get("generate_dfa_button"): widgets["generate_dfa_button"].configure(state="disabled")
             if widgets.get("save_dfa_button"): widgets["save_dfa_button"].configure(state="disabled")
             if widgets.get("tokenize_button"): widgets["tokenize_button"].configure(state="disabled")
             messagebox.showinfo("Sucesso (Etapa A)", f"({self.current_test_name}): Processamento de REs e NFAs concluído.")
@@ -341,7 +352,6 @@ class LexerGeneratorApp(ctk.CTk):
 
 
     def combine_all_nfas(self):
-        # ... (This method remains the same)
         widgets = self.get_current_mode_widgets()
         if not widgets: return
         nfas_for_combination = {k: v for k,v in self.individual_nfas.items() if v is not None}
@@ -353,7 +363,7 @@ class LexerGeneratorApp(ctk.CTk):
             output_str = get_nfa_details_str(combined_nfa_shell_for_display, "NFA Combinado Global", combined_accept_map=self.combined_nfa_accept_map)
             self._update_display("NFA Combinado", output_str)
             if widgets.get("display_tab_view"): widgets["display_tab_view"].set("NFA Combinado")
-            if widgets.get("generate_dfa_button"): widgets["generate_dfa_button"].configure(state="normal") # etc.
+            if widgets.get("generate_dfa_button"): widgets["generate_dfa_button"].configure(state="normal")
             if widgets.get("save_dfa_button"): widgets["save_dfa_button"].configure(state="disabled")
             if widgets.get("tokenize_button"): widgets["tokenize_button"].configure(state="disabled")
             messagebox.showinfo("Sucesso (Etapa B)", f"({self.current_test_name}): NFAs combinados.")
@@ -364,7 +374,6 @@ class LexerGeneratorApp(ctk.CTk):
 
 
     def generate_dfa_from_nfa(self):
-        # ... (This method remains the same)
         widgets = self.get_current_mode_widgets()
         if not widgets: return
         if not self.combined_nfa_start_obj or self.combined_nfa_accept_map is None or self.combined_nfa_alphabet is None: messagebox.showerror("NFA Ausente", f"({self.current_test_name}): NFA combinado não pronto."); return
@@ -374,7 +383,7 @@ class LexerGeneratorApp(ctk.CTk):
             self._update_display("AFD (Tabela)", output_str)
             if widgets.get("display_tab_view"): widgets["display_tab_view"].set("AFD (Tabela)")
             self.lexer = Lexer(self.dfa, self.reserved_words_defs, self.patterns_to_ignore)
-            if widgets.get("tokenize_button"): widgets["tokenize_button"].configure(state="normal") # etc.
+            if widgets.get("tokenize_button"): widgets["tokenize_button"].configure(state="normal")
             if widgets.get("save_dfa_button"): widgets["save_dfa_button"].configure(state="normal")
             messagebox.showinfo("Sucesso (Etapa C)", f"({self.current_test_name}): AFD gerado e Lexer pronto.")
         except Exception as e:
@@ -385,7 +394,6 @@ class LexerGeneratorApp(ctk.CTk):
 
 
     def save_dfa_to_file(self):
-        # ... (This method remains the same)
         if not self.dfa: messagebox.showerror("Sem AFD", f"({self.current_test_name}): Nenhum AFD para salvar."); return
         filepath = filedialog.asksaveasfilename(defaultextension=".dfa.txt", filetypes=(("DFA Text files", "*.dfa.txt"),("Text files", "*.txt"), ("All files", "*.*")), title=f"Salvar Tabela AFD ({self.current_test_name})")
         if filepath:
@@ -400,7 +408,6 @@ class LexerGeneratorApp(ctk.CTk):
             except Exception as e: messagebox.showerror("Erro Salvar AFD", str(e))
 
     def tokenize_source(self):
-        # ... (This method remains the same)
         widgets = self.get_current_mode_widgets()
         if not widgets: return
         if not self.lexer: messagebox.showerror("Lexer Indisponível", f"({self.current_test_name}): Analisador Léxico não gerado."); return
