@@ -1,6 +1,7 @@
 # gui.py
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
+import os
 
 from automata import (NFA, DFA, NFAState, postfix_to_nfa, _finalize_nfa_properties,
                       combine_nfas, construct_unminimized_dfa_from_nfa, _minimize_dfa)
@@ -8,8 +9,9 @@ from lexer_core import Lexer, parse_re_file_data
 from regex_utils import infix_to_postfix 
 
 from syntax_tree_direct_dfa import regex_to_direct_dfa, AugmentedRegexSyntaxTreeNode, PositionNode
-
+from graph_drawer import draw_dfa_to_file
 from ui_formatters import get_nfa_details_str, get_dfa_table_str, get_dfa_anexo_ii_format
+
 from tests import TEST_CASES
 
 class LexerGeneratorApp(ctk.CTk):
@@ -83,18 +85,18 @@ class LexerGeneratorApp(ctk.CTk):
         if widgets:
             is_thompson = (self.active_construction_method == "thompson")
             if widgets.get("combine_nfas_button"):
-                widgets["combine_nfas_button"].configure(state="disabled") # Always reset then enable if needed
+                widgets["combine_nfas_button"].configure(state="disabled")
             
             process_btn_text = "A. Processar REs "
             if is_thompson: process_btn_text += "➔ NFAs (Thompson)"
-            else: process_btn_text += "➔ DFAs (Followpos)" # For tree_direct_dfa
+            else: process_btn_text += "➔ DFAs (Followpos)"
             if widgets.get("process_re_button"):
                  widgets["process_re_button"].configure(text=process_btn_text)
 
         if frame_name == "AutoTestMode":
             self.active_construction_method = "thompson"
-            widgets = self.get_current_mode_widgets() # Re-get widgets for auto mode
-            if widgets and widgets.get("process_re_button"): # Update button text for auto mode
+            widgets = self.get_current_mode_widgets()
+            if widgets and widgets.get("process_re_button"):
                  widgets["process_re_button"].configure(text="A. Processar REs ➔ NFAs (Thompson)")
 
             if widgets and widgets.get("re_input_textbox") and \
@@ -173,9 +175,14 @@ class LexerGeneratorApp(ctk.CTk):
         generate_dfa_button.pack(pady=3, padx=10, fill="x")
         widgets["generate_dfa_button"] = generate_dfa_button
         
+        draw_dfa_button = ctk.CTkButton(outer_control_frame, text="🎨 Desenhar AFD Minimizado", command=self.draw_current_minimized_dfa, state="disabled")
+        draw_dfa_button.pack(pady=3, padx=10, fill="x")
+        widgets["draw_dfa_button"] = draw_dfa_button
+
         save_dfa_button = ctk.CTkButton(outer_control_frame, text="Salvar Tabela AFD Minimizada (Anexo II)", command=self.save_dfa_to_file, state="disabled")
         save_dfa_button.pack(pady=(3,10), padx=10, fill="x")
         widgets["save_dfa_button"] = save_dfa_button
+
 
         ctk.CTkLabel(outer_control_frame, text="2. Texto Fonte para Análise:", font=("Arial", 13, "bold")).pack(pady=(10,2), padx=10, anchor="w", fill="x")
         source_code_input_textbox = ctk.CTkTextbox(outer_control_frame, height=150, font=("Consolas", 11))
@@ -294,20 +301,9 @@ class LexerGeneratorApp(ctk.CTk):
         for tab_name_key in widgets["textboxes_map"]: self._update_display(tab_name_key, "")
         
         widgets["process_re_button"].configure(state="normal")
-        is_thompson = (self.active_construction_method == "thompson")
         
-        combine_btn = widgets.get("combine_nfas_button")
-        if combine_btn: combine_btn.configure(state="disabled") # Default disabled
-        
-        gen_dfa_btn = widgets.get("generate_dfa_button")
-        if gen_dfa_btn: gen_dfa_btn.configure(state="disabled")
-
-        save_dfa_btn = widgets.get("save_dfa_button")
-        if save_dfa_btn: save_dfa_btn.configure(state="disabled")
-
-        tokenize_btn = widgets.get("tokenize_button")
-        if tokenize_btn: tokenize_btn.configure(state="disabled")
-
+        for btn_key in ["combine_nfas_button", "generate_dfa_button", "draw_dfa_button", "save_dfa_button", "tokenize_button"]:
+            if widgets.get(btn_key): widgets[btn_key].configure(state="disabled")
 
     def process_regular_expressions(self):
         widgets = self.get_current_mode_widgets()
@@ -327,8 +323,8 @@ class LexerGeneratorApp(ctk.CTk):
         try:
             NFA.reset_state_ids()
             PositionNode.reset_id_counter()
-            DFA._next_dfa_id = 0 # Global reset for DFA IDs for each processing run
-            DFA._state_map = {}   # Ensure DFA class static/shared map is clear
+            DFA._next_dfa_id = 0 
+            DFA._state_map = {}  
 
             self.definitions, self.pattern_order, self.reserved_words_defs, self.patterns_to_ignore = parse_re_file_data(re_content)
             
@@ -358,8 +354,6 @@ class LexerGeneratorApp(ctk.CTk):
                 if process_successful and widgets.get("combine_nfas_button"): widgets["combine_nfas_button"].configure(state="normal")
 
             elif self.active_construction_method == "tree_direct_dfa":
-                # For tree_direct_dfa, we create one DFA per RE definition for now to show intermediate steps.
-                # A "final" DFA would ideally be from a combined RE.
                 has_any_valid_direct_dfa = False
                 temp_direct_dfa_display = []
 
@@ -368,31 +362,32 @@ class LexerGeneratorApp(ctk.CTk):
                     if not regex_str: continue
                     construction_details_builder.append(f"Definição: {name}: {regex_str}\n")
                     try:
-                        # Each call to regex_to_direct_dfa will use a fresh DFA object internally due to how it's structured
-                        # And PositionNode IDs are reset once at the start of process_regular_expressions
-                        direct_dfa, aug_tree, pos_map = regex_to_direct_dfa(regex_str, name) # name is pattern_name_for_dfa
+                        direct_dfa, aug_tree, pos_map = regex_to_direct_dfa(regex_str, name)
                         if direct_dfa and aug_tree and pos_map:
-                            self.direct_dfas_followpos[name] = direct_dfa
-                            self.augmented_syntax_trees_followpos[name] = aug_tree
-                            self.followpos_tables_followpos[name] = pos_map
-                            
-                            construction_details_builder.append(f"  Árvore Aumentada para '{name}':\n{aug_tree}\n")
-                            fp_details = ["  Tabela Followpos:"]
-                            for pid_sorted in sorted(pos_map.keys()): # Sort for consistent display
-                                pnode = pos_map[pid_sorted]
-                                fp_str_ids = sorted([str(fp.id) for fp in pnode.followpos])
-                                fp_details.append(f"    {pnode}: {{ {', '.join(fp_str_ids)} }}")
-                            construction_details_builder.append("\n".join(fp_details) + "\n")
-                            temp_direct_dfa_display.append(get_dfa_table_str(direct_dfa, f"DFA Direto (não minimizado) para '{name}'"))
-                            has_any_valid_direct_dfa = True
-                        else: construction_details_builder.append("  DFA Direto: (Não gerado ou regex vazia/epsilon)\n\n")
-                    except Exception as ve_re: construction_details_builder.append(f"  ERRO DFA Direto '{name}': {ve_re}\n\n");
+                            if not direct_dfa.states and not (direct_dfa.start_state_id is not None and direct_dfa.start_state_id in direct_dfa.accept_states) :
+                                construction_details_builder.append(f"  DFA Direto para '{name}': (Linguagem vazia ou erro na geração)\n\n")
+                            else:
+                                self.direct_dfas_followpos[name] = direct_dfa
+                                self.augmented_syntax_trees_followpos[name] = aug_tree
+                                self.followpos_tables_followpos[name] = pos_map
+                                
+                                construction_details_builder.append(f"  Árvore Aumentada para '{name}':\n{aug_tree}\n")
+                                fp_details = ["  Tabela Followpos:"]
+                                sorted_pos_ids = sorted(pos_map.keys())
+                                for pid_sorted in sorted_pos_ids:
+                                    pnode = pos_map[pid_sorted]
+                                    fp_obj_ids_sorted = sorted([fp_obj.id for fp_obj in pnode.followpos])
+                                    fp_details.append(f"    {pnode}: {{ {', '.join(map(str,fp_obj_ids_sorted))} }}")
+                                construction_details_builder.append("\n".join(fp_details) + "\n")
+                                temp_direct_dfa_display.append(get_dfa_table_str(direct_dfa, f"DFA Direto (não minimizado) para '{name}'"))
+                                has_any_valid_direct_dfa = True
+                        else: construction_details_builder.append(f"  DFA Direto para '{name}': (Não gerado ou regex original resultou em linguagem vazia/epsilon que foi tratada especialmente)\n\n")
+                    except Exception as ve_re: construction_details_builder.append(f"  ERRO DFA Direto '{name}': {type(ve_re).__name__} - {ve_re}\n\n");
                 
                 process_successful = has_any_valid_direct_dfa
                 if process_successful and widgets.get("generate_dfa_button"):
                     widgets["generate_dfa_button"].configure(state="normal")
                 
-                # Display the individual direct DFAs in the "Autômato Intermediário / Direto" tab
                 self._update_display("Autômato Intermediário / Direto", "\n\n".join(temp_direct_dfa_display))
                 if widgets.get("display_tab_view"): widgets["display_tab_view"].set("Autômato Intermediário / Direto")
 
@@ -409,8 +404,7 @@ class LexerGeneratorApp(ctk.CTk):
         except Exception as e:
             messagebox.showerror("Erro na Etapa A", f"({self.current_test_name}): {type(e).__name__}: {str(e)}")
             self._update_display("Construção Detalhada", f"Erro: {str(e)}")
-
-
+    
     def combine_all_nfas(self):
         widgets = self.get_current_mode_widgets()
         if not widgets or self.active_construction_method != "thompson": return
@@ -434,18 +428,17 @@ class LexerGeneratorApp(ctk.CTk):
             messagebox.showerror("Erro Etapa B - Thompson", f"{type(e).__name__}: {str(e)}")
             self._update_display("Autômato Intermediário / Direto", f"Erro: {str(e)}")
 
-
     def generate_final_dfa_and_minimize(self):
         widgets = self.get_current_mode_widgets()
         if not widgets: return
 
         dfa_output_str_parts = []
-        self.unminimized_dfa = None # Clear previous
-        self.dfa = None             # Clear previous
+        self.unminimized_dfa = None 
+        self.dfa = None            
 
         try:
-            DFA._next_dfa_id = 0 # Reset for new DFA construction
-            DFA._state_map = {}  # Clear map
+            DFA._next_dfa_id = 0 
+            DFA._state_map = {}  
 
             if self.active_construction_method == "thompson":
                 if not self.combined_nfa_start_obj:
@@ -461,35 +454,22 @@ class LexerGeneratorApp(ctk.CTk):
                 if not self.direct_dfas_followpos:
                     messagebox.showerror("DFAs Diretos Ausentes", "Nenhum DFA direto (Followpos) gerado na Etapa A."); return
                 
-                # For multiple REs with followpos, a true "combined" DFA needs a more complex setup.
-                # Current `regex_to_direct_dfa` handles one RE.
-                # If multiple REs were processed, `self.direct_dfas_followpos` contains multiple DFAs.
-                # We need one unminimized DFA to proceed.
-                # Strategy: Combine REs with unique end markers then build one DFA.
-                # This is complex to integrate here. For now, if multiple REs, use Thompson strategy
-                # by converting each direct DFA to an NFA (trivial), combining NFAs, then NFA->DFA.
-                # OR, for simplicity, take the *first* direct DFA if only one, or error if multiple.
-
                 if len(self.direct_dfas_followpos) == 1:
-                    first_pattern_name = self.pattern_order[0] # Assuming order matches
+                    first_pattern_name = self.pattern_order[0] 
                     self.unminimized_dfa = self.direct_dfas_followpos.get(first_pattern_name)
                     if self.unminimized_dfa:
                         dfa_output_str_parts.append(get_dfa_table_str(self.unminimized_dfa, title_prefix=f"AFD Direto (Followpos) para '{first_pattern_name}' Não Minimizado: "))
                     else:
                         messagebox.showerror("Erro", "DFA direto não encontrado para o primeiro padrão.")
                         return
-                else:
-                    # This is the hard part for followpos with multiple patterns.
-                    # The "correct" way is to build (R1|R2|...Rn)# with unique end markers.
-                    # The current `regex_to_direct_dfa` is not set up for this mapping of accept states.
-                    # As a fallback or placeholder for a more advanced combination:
+                else: 
                     messagebox.showinfo("Info Followpos Múltiplo", 
-                                        "Múltiplas REs com Followpos. "
-                                        "Idealmente, um DFA direto unificado seria construído para (R1|R2|...). "
-                                        "Para demonstração, o primeiro DFA direto será minimizado. "
-                                        "Para um lexer completo, combine as REs antes do Followpos.")
+                                        "Múltiplas REs processadas com Followpos individualmente.\n"
+                                        "Para um lexer completo com Followpos, combine as REs em uma única expressão "
+                                        "(ex: (R1)|(R2)|...) antes de aplicar o algoritmo de Followpos.\n"
+                                        "Para esta demonstração, o AFD direto do *primeiro* padrão será usado para minimização.")
                     if not self.pattern_order or not self.direct_dfas_followpos.get(self.pattern_order[0]):
-                        messagebox.showerror("Erro", "Nenhum DFA direto disponível para demonstração.")
+                        messagebox.showerror("Erro", "Nenhum DFA direto disponível para demonstração de minimização.")
                         return
                     self.unminimized_dfa = self.direct_dfas_followpos[self.pattern_order[0]]
                     dfa_output_str_parts.append(get_dfa_table_str(self.unminimized_dfa, title_prefix=f"AFD Direto (Followpos) para '{self.pattern_order[0]}' (Não Minimizado): "))
@@ -499,7 +479,7 @@ class LexerGeneratorApp(ctk.CTk):
                 messagebox.showerror("Erro", "Nenhum AFD não minimizado foi gerado ou selecionado para esta etapa.")
                 return
 
-            self.dfa = _minimize_dfa(self.unminimized_dfa) # self.dfa is now the minimized one
+            self.dfa = _minimize_dfa(self.unminimized_dfa)
             dfa_output_str_parts.append(get_dfa_table_str(self.dfa, title_prefix="AFD Minimizado: "))
             
             self._update_display("AFD Final (Tabelas)", "\n\n====================\n\n".join(dfa_output_str_parts))
@@ -508,14 +488,34 @@ class LexerGeneratorApp(ctk.CTk):
             self.lexer = Lexer(self.dfa, self.reserved_words_defs, self.patterns_to_ignore)
             if widgets.get("tokenize_button"): widgets["tokenize_button"].configure(state="normal")
             if widgets.get("save_dfa_button"): widgets["save_dfa_button"].configure(state="normal")
+            if widgets.get("draw_dfa_button"): widgets["draw_dfa_button"].configure(state="normal")
             messagebox.showinfo("Sucesso (Etapa C)", "AFD Final (Não Minimizado e Minimizado) gerado. Lexer pronto.")
 
         except Exception as e:
             messagebox.showerror("Erro Etapa C", f"({self.current_test_name}): {type(e).__name__}: {str(e)}")
             self._update_display("AFD Final (Tabelas)", f"Erro: {str(e)}")
-            # Disable buttons if error
-            if widgets.get("tokenize_button"): widgets["tokenize_button"].configure(state="disabled")
-            if widgets.get("save_dfa_button"): widgets["save_dfa_button"].configure(state="disabled")
+            for btn_key in ["tokenize_button", "save_dfa_button", "draw_dfa_button"]:
+                if widgets.get(btn_key): widgets[btn_key].configure(state="disabled")
+
+    def draw_current_minimized_dfa(self):
+        widgets = self.get_current_mode_widgets()
+        if not widgets: return
+
+        if not self.dfa:
+            messagebox.showerror("Sem AFD", "Nenhum AFD minimizado para desenhar. Gere o AFD primeiro.")
+            return
+        
+        test_name_slug = "".join(c if c.isalnum() else "_" for c in self.current_test_name)
+        filename = f"dfa_graph_{test_name_slug}"
+        
+        try:
+            filepath = draw_dfa_to_file(self.dfa, filename_prefix=filename, view=True)
+            if filepath:
+                messagebox.showinfo("Desenho AFD", f"Desenho do AFD salvo/aberto em:\n{os.path.abspath(filepath)}")
+            else:
+                messagebox.showwarning("Desenho AFD", "Não foi possível gerar a imagem do AFD. Verifique o console para detalhes (Graphviz pode não estar instalado ou no PATH).")
+        except Exception as e:
+            messagebox.showerror("Erro ao Desenhar AFD", f"Ocorreu um erro inesperado: {e}")
 
 
     def save_dfa_to_file(self):
@@ -526,14 +526,14 @@ class LexerGeneratorApp(ctk.CTk):
                 anexo_ii_content = get_dfa_anexo_ii_format(self.dfa)
                 with open(filepath, 'w', encoding='utf-8') as f_out: f_out.write(anexo_ii_content)
                 
-                hr_filepath_min = filepath.replace(".dfa.txt", "_min_readable.txt")
-                if hr_filepath_min == filepath: hr_filepath_min = filepath + "_min_readable.txt"
+                base_name, ext = os.path.splitext(filepath)
+
+                hr_filepath_min = f"{base_name}_min_readable.txt"
                 hr_content_min = get_dfa_table_str(self.dfa, title_prefix="Minimized ");
                 with open(hr_filepath_min, 'w', encoding='utf-8') as f_hr_min: f_hr_min.write(hr_content_min)
 
                 if self.unminimized_dfa:
-                    hr_filepath_unmin = filepath.replace(".dfa.txt", "_unmin_readable.txt")
-                    if hr_filepath_unmin == filepath: hr_filepath_unmin = filepath + "_unmin_readable.txt"
+                    hr_filepath_unmin = f"{base_name}_unmin_readable.txt"
                     hr_content_unmin = get_dfa_table_str(self.unminimized_dfa, title_prefix="Unminimized ");
                     with open(hr_filepath_unmin, 'w', encoding='utf-8') as f_hr_unmin: f_hr_unmin.write(hr_content_unmin)
 
@@ -556,3 +556,7 @@ class LexerGeneratorApp(ctk.CTk):
         except Exception as e:
             messagebox.showerror("Erro Análise Léxica", f"({self.current_test_name}): {type(e).__name__}: {str(e)}")
             self._update_display("Tokens Gerados", f"Erro: {str(e)}")
+
+if __name__ == "__main__":
+    app = LexerGeneratorApp()
+    app.mainloop()
