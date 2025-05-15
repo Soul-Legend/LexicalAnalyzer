@@ -1,6 +1,8 @@
+# gui.py
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import os
+from PIL import Image 
 
 from automata import (NFA, DFA, NFAState, postfix_to_nfa, _finalize_nfa_properties,
                       combine_nfas, construct_unminimized_dfa_from_nfa, _minimize_dfa)
@@ -18,7 +20,7 @@ class LexerGeneratorApp(ctk.CTk):
         super().__init__()
 
         self.title("T1 Formais: Gerador de Analisadores Léxicos")
-        self.geometry("1300x850")
+        self.geometry("1300x850") 
         ctk.set_appearance_mode("System")
         ctk.set_default_color_theme("blue")
 
@@ -49,6 +51,7 @@ class LexerGeneratorApp(ctk.CTk):
         self.active_construction_method = "thompson" 
         
         self.images_output_dir = "imagens"
+        # self.dfa_image_label não é mais um atributo de classe direto
 
 
         self.container = ctk.CTkFrame(self, fg_color="transparent")
@@ -203,15 +206,22 @@ class LexerGeneratorApp(ctk.CTk):
         display_tab_view.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
         widgets["display_tab_view"] = display_tab_view
         
-        tab_names = ["Construção Detalhada", "Autômato Intermediário / Direto", "AFD Final (Tabelas)", "Tokens Gerados"]
+        tab_names = ["Construção Detalhada", "Autômato Intermediário / Direto", "AFD Final (Tabelas)", "Desenho AFD", "Tokens Gerados"]
         textboxes_map = {} 
+        widgets["dfa_image_label"] = None # Inicializa a chave para o label da imagem
         for name in tab_names:
             tab = display_tab_view.add(name)
-            textbox = ctk.CTkTextbox(tab, wrap="none", font=("Consolas", 10), state="disabled")
-            textbox.pack(expand=True, fill="both", padx=5, pady=5)
-            textboxes_map[name] = textbox
-        display_tab_view.set(tab_names[0])
+            if name == "Desenho AFD":
+                image_label = ctk.CTkLabel(tab, text="Nenhum AFD desenhado ainda.", compound="top")
+                image_label.pack(expand=True, fill="both", padx=5, pady=5)
+                widgets["dfa_image_label"] = image_label # Armazena no dict de widgets
+            else:
+                textbox = ctk.CTkTextbox(tab, wrap="none", font=("Consolas", 10), state="disabled")
+                textbox.pack(expand=True, fill="both", padx=5, pady=5)
+                textboxes_map[name] = textbox
+        
         widgets["textboxes_map"] = textboxes_map
+        display_tab_view.set(tab_names[0])
         
         return widgets
 
@@ -301,6 +311,10 @@ class LexerGeneratorApp(ctk.CTk):
         if not widgets: return
 
         for tab_name_key in widgets["textboxes_map"]: self._update_display(tab_name_key, "")
+        
+        dfa_img_label_current = widgets.get("dfa_image_label")
+        if dfa_img_label_current:
+            dfa_img_label_current.configure(image=None, text="Nenhum AFD desenhado ainda.")
         
         widgets["process_re_button"].configure(state="normal")
         
@@ -503,21 +517,72 @@ class LexerGeneratorApp(ctk.CTk):
         widgets = self.get_current_mode_widgets()
         if not widgets: return
 
+        dfa_img_label_current = widgets.get("dfa_image_label")
+
         if not self.dfa:
             messagebox.showerror("Sem AFD", "Nenhum AFD minimizado para desenhar. Gere o AFD primeiro.")
+            if dfa_img_label_current: dfa_img_label_current.configure(image=None, text="Nenhum AFD minimizado disponível.")
             return
         
         test_name_slug = "".join(c if c.isalnum() else "_" for c in self.current_test_name)
-        filename = f"dfa_graph_{test_name_slug}"
+        filename_prefix = f"dfa_graph_{test_name_slug}"
         
         try:
-            filepath = draw_dfa_to_file(self.dfa, filename_prefix=filename, output_subdir=self.images_output_dir, view=True)
-            if filepath:
-                messagebox.showinfo("Desenho AFD", f"Desenho do AFD salvo/aberto em:\n{os.path.abspath(filepath)}")
+            image_path = draw_dfa_to_file(self.dfa, filename_prefix=filename_prefix, output_subdir=self.images_output_dir, view=False)
+            
+            if image_path and os.path.exists(image_path):
+                pil_image = Image.open(image_path)
+                
+                # Manter proporção, mas limitar tamanho para caber na GUI
+                original_width, original_height = pil_image.size
+                # Tentar obter o tamanho da aba (pode ser aproximado se a aba não estiver visível)
+                tab_widget = widgets["display_tab_view"].winfo_children()[ widgets["display_tab_view"].index("Desenho AFD") ]
+                
+                # Usar um tamanho máximo se a aba não tiver dimensões ainda
+                # Estes valores podem precisar de ajuste
+                max_tab_width = tab_widget.winfo_width() if tab_widget.winfo_width() > 20 else 700 
+                max_tab_height = tab_widget.winfo_height() if tab_widget.winfo_height() > 20 else 500
+
+                img_aspect_ratio = original_width / original_height
+                
+                new_width = original_width
+                new_height = original_height
+
+                if new_width > max_tab_width:
+                    new_width = max_tab_width
+                    new_height = int(new_width / img_aspect_ratio)
+                
+                if new_height > max_tab_height:
+                    new_height = max_tab_height
+                    new_width = int(new_height * img_aspect_ratio)
+
+                # Garantir que a nova largura também não exceda max_tab_width após ajuste de altura
+                if new_width > max_tab_width:
+                    new_width = max_tab_width
+                    new_height = int(new_width / img_aspect_ratio)
+
+
+                resized_image = pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                ctk_image = ctk.CTkImage(light_image=resized_image, dark_image=resized_image, size=(resized_image.width, resized_image.height))
+                
+                if dfa_img_label_current:
+                    dfa_img_label_current.configure(image=ctk_image, text="") 
+                    dfa_img_label_current.image = ctk_image 
+                
+                if widgets.get("display_tab_view"):
+                    try:
+                        widgets["display_tab_view"].set("Desenho AFD")
+                    except Exception: 
+                        pass 
+                messagebox.showinfo("Desenho AFD", f"Desenho do AFD exibido e salvo em:\n{image_path}")
             else:
-                messagebox.showwarning("Desenho AFD", "Não foi possível gerar a imagem do AFD. Verifique o console para detalhes (Graphviz pode não estar instalado ou no PATH).")
+                if dfa_img_label_current:
+                    dfa_img_label_current.configure(image=None, text="Falha ao gerar/encontrar imagem do AFD.")
+                messagebox.showwarning("Desenho AFD", "Não foi possível gerar ou encontrar a imagem do AFD. Verifique o console.")
         except Exception as e:
-            messagebox.showerror("Erro ao Desenhar AFD", f"Ocorreu um erro inesperado: {e}")
+            if dfa_img_label_current:
+                dfa_img_label_current.configure(image=None, text=f"Erro ao desenhar AFD: {type(e).__name__}")
+            messagebox.showerror("Erro ao Desenhar AFD", f"Ocorreu um erro: {e}")
 
 
     def save_dfa_to_file(self):
