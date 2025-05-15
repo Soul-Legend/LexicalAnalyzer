@@ -1,11 +1,5 @@
 # ui_formatters.py
-"""
-Functions to format automata details into strings for UI display.
-"""
-# from automata import NFA, DFA (for type hinting if needed)
-
 def get_nfa_details_str(nfa_obj, name="NFA", combined_accept_map=None):
-    """Generates a string representation of an NFA's details."""
     output = []
     output.append(f"--- {name} Details ---")
 
@@ -13,22 +7,15 @@ def get_nfa_details_str(nfa_obj, name="NFA", combined_accept_map=None):
         output.append("NFA is empty or not properly initialized.")
         return "\n".join(output)
 
-    # Determine all states to print for this NFA component
-    # For combined NFA shell, nfa_obj.states might be empty, so traverse
     states_to_print = set()
     if hasattr(nfa_obj, 'states') and nfa_obj.states:
-        states_to_print.update(nfa_obj.states) # Use pre-populated if available
+        states_to_print.update(nfa_obj.states)
 
-    # Always include start_state
     if nfa_obj.start_state: states_to_print.add(nfa_obj.start_state)
-    # For individual NFAs, include accept_state
     if hasattr(nfa_obj, 'accept_state') and nfa_obj.accept_state: states_to_print.add(nfa_obj.accept_state)
-    # For combined NFAs, include states from the accept map
     if combined_accept_map:
         for s_obj in combined_accept_map.keys(): states_to_print.add(s_obj)
     
-    # Traverse from start state to ensure all connected states are included for printing
-    # This is crucial if nfa_obj.states wasn't fully populated for a conceptual NFA (like combined shell)
     q_bfs = []
     if nfa_obj.start_state: q_bfs.append(nfa_obj.start_state)
     
@@ -39,7 +26,7 @@ def get_nfa_details_str(nfa_obj, name="NFA", combined_accept_map=None):
     while head < len(q_bfs):
         curr = q_bfs[head]
         head += 1
-        states_to_print.add(curr) # Ensure current is in the set
+        states_to_print.add(curr)
         for symbol, next_states_set in curr.transitions.items():
             for next_s in next_states_set:
                 states_to_print.add(next_s)
@@ -52,13 +39,13 @@ def get_nfa_details_str(nfa_obj, name="NFA", combined_accept_map=None):
     output.append(f"Start State: S{nfa_obj.start_state.id}")
     
     accept_display_parts = []
-    if hasattr(nfa_obj, 'accept_state') and nfa_obj.accept_state in states_to_print : # For individual NFA
+    if hasattr(nfa_obj, 'accept_state') and nfa_obj.accept_state in states_to_print :
         pattern_name_guess = name.split("'")[1] if "'" in name else "Current"
         accept_display_parts.append(f"S{nfa_obj.accept_state.id} (Pattern: {pattern_name_guess})")
 
-    if combined_accept_map: # For combined NFA display
+    if combined_accept_map:
         for s_obj, pat_name in combined_accept_map.items():
-            if s_obj in states_to_print: # Only show if part of the traversed component
+            if s_obj in states_to_print:
                 accept_display_parts.append(f"S{s_obj.id}({pat_name})")
     
     output.append(f"Accept State(s): {', '.join(sorted(list(set(accept_display_parts)))) if accept_display_parts else 'None'}")
@@ -73,12 +60,11 @@ def get_nfa_details_str(nfa_obj, name="NFA", combined_accept_map=None):
     return "\n".join(output)
 
 
-def get_dfa_table_str(dfa):
-    """Generates a string representation of a DFA's transition table."""
+def get_dfa_table_str(dfa, title_prefix=""): # Added title_prefix
     output = []
-    output.append("DFA Transition Table & Details:")
+    output.append(f"{title_prefix}DFA Transition Table & Details:") # Used title_prefix
     if not dfa or not dfa.states:
-        output.append("DFA not generated or empty.")
+        output.append(f"{title_prefix}DFA not generated or empty.")
         return "\n".join(output)
 
     output.append(f"Number of states: {len(dfa.states)}")
@@ -112,7 +98,6 @@ def get_dfa_table_str(dfa):
     return "\n".join(output)
 
 def get_dfa_anexo_ii_format(dfa):
-    """Formats DFA details according to Anexo II."""
     if not dfa or not dfa.states: return "DFA not available for Anexo II format."
     lines = []
     lines.append(str(len(dfa.states)))
@@ -120,7 +105,6 @@ def get_dfa_anexo_ii_format(dfa):
     lines.append(",".join(map(str, sorted(list(dfa.accept_states.keys())))))
     lines.append(",".join(sorted(list(dfa.alphabet))))
     
-    # Sort transitions for consistent output: by from_state, then by symbol
     sorted_transitions = sorted(dfa.transitions.items(), key=lambda item: (item[0][0], str(item[0][1])))
     for (from_s, sym), to_s in sorted_transitions:
         lines.append(f"{from_s},{sym},{to_s}")
