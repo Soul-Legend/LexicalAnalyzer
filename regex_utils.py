@@ -1,23 +1,7 @@
-# regex_utils.py
 from config import EPSILON, CONCAT_OP
 
 REGEX_META_OPERATORS = "*+?|."
 REGEX_GROUPING_SYMBOLS = "()"
-
-class RegexSyntaxTreeNode:
-    def __init__(self, value, node_type, left=None, right=None):
-        self.value = value
-        self.type = node_type # 'literal', 'concat', 'union', 'star', 'plus', 'optional'
-        self.left = left
-        self.right = right
-
-    def __repr__(self, level=0, prefix="Root:"):
-        ret = "\t" * level + prefix + f"({self.type}, {self.value})\n"
-        if self.left:
-            ret += self.left.__repr__(level + 1, "L---")
-        if self.right:
-            ret += self.right.__repr__(level + 1, "R---")
-        return ret
 
 def is_literal_char(char_code):
     if char_code == EPSILON:
@@ -59,40 +43,94 @@ def expand_char_class(char_class_str):
         return "" 
     if len(expanded_chars) == 1:
         return expanded_chars[0]
+    
+    # For followpos, we want individual literals, not a big OR for char classes yet.
+    # The ORing happens at a higher level (e.g. (a|b|c) gets parsed into UNION nodes).
+    # So, [abc] should become (a|b|c) for the parser.
+    # If a char class expands to one char, e.g. [a], it's just 'a'.
+    # If it expands to multiple, e.g. [a-c], it becomes '(a|b|c)'.
     return "(" + "|".join(expanded_chars) + ")"
 
+
+def desugar_regex_operators(regex_str):
+    # Desugar R+ to RR* and R? to (R|&)
+    # This is a simple text replacement; more robust parsing would be better for complex cases.
+    # This needs to be careful with operator precedence and grouping.
+    # Example: (a+b)? -> ((aa*)b | &)
+    # For now, let's assume the input regex for followpos primarily uses *, |, .
+    # Or that these desugaring steps are simple enough.
+    
+    # R? -> (R|&)
+    # This replacement is tricky due to nested structures.
+    # A proper parser for desugaring is better.
+    # For now, we'll rely on the main shunting yard in build_augmented_syntax_tree
+    # to correctly parse *, |, . and assume + and ? are not used or are manually expanded.
+    # The example aa*(bb*aa*b)* only uses these.
+    
+    # If we were to implement it simply (and potentially incorrectly for complex cases):
+    # new_re = regex_str
+    # new_re = new_re.replace('?', f'|{EPSILON})') # This is too naive
+    # A better way is to handle + and ? during the tree construction phase
+    # or require them to be absent from the input to regex_to_direct_dfa.
+    # The current build_augmented_syntax_tree raises an error if it sees + or ?.
+    return regex_str
+
+
 def preprocess_regex(regex_str):
+    # First, potentially desugar + and ? if not handled by tree builder for followpos
+    # current_regex = desugar_regex_operators(regex_str) # Not robust enough for now
+    current_regex = regex_str
+
     processed_re_pass1 = ""
     i = 0
-    while i < len(regex_str):
-        if regex_str[i] == '[':
+    while i < len(current_regex):
+        if current_regex[i] == '[':
             try:
-                j = regex_str.index(']', i + 1)
-                char_class_segment = regex_str[i : j+1]
+                j = current_regex.find(']', i + 1)
+                if j == -1: raise ValueError("Mismatched '[' in regex")
+                char_class_segment = current_regex[i : j+1]
                 expanded_segment = expand_char_class(char_class_segment)
                 processed_re_pass1 += expanded_segment
                 i = j + 1
-            except ValueError:
-                processed_re_pass1 += regex_str[i]
-                i += 1
+            except ValueError as e:
+                # If char class parsing fails, treat '[' literally or re-raise
+                # For now, let's assume valid char classes or raise error
+                raise ValueError(f"Error processing char class '{current_regex[i:]}': {e}")
         else:
-            processed_re_pass1 += regex_str[i]
+            processed_re_pass1 += current_regex[i]
             i += 1
     
     processed_re_pass2 = []
     if not processed_re_pass1: return ""
 
-    for k, char_k in enumerate(processed_re_pass1):
+    # Add explicit concatenation operators
+    idx = 0
+    while idx < len(processed_re_pass1):
+        char_k = processed_re_pass1[idx]
         processed_re_pass2.append(char_k)
-        if k < len(processed_re_pass1) - 1:
-            next_char = processed_re_pass1[k+1]
-            char_k_ends_operand_construct = is_literal_char(char_k) or char_k in (')', '*', '+', '?')
-            next_char_starts_operand_construct = is_literal_char(next_char) or next_char == '('
-            if char_k_ends_operand_construct and next_char_starts_operand_construct:
+
+        if idx < len(processed_re_pass1) - 1:
+            next_char = processed_re_pass1[idx+1]
+            # Condition for adding CONCAT_OP:
+            # char_k is a literal, or ')', or '*'
+            # next_char is a literal, or '('
+            # (No concat after '|', no concat before '|', '*', CONCAT_OP)
+            
+            # More precise: insert concat if char_k can end an operand and next_char can start one.
+            # Ends an operand: literal, ')', '*'
+            # Starts an operand: literal, '('
+            # Literals here include EPSILON for this check
+            char_k_can_end = is_literal_char(char_k) or char_k in (')', '*')
+            next_char_can_start = is_literal_char(next_char) or next_char == '('
+            
+            if char_k_can_end and next_char_can_start:
                 processed_re_pass2.append(CONCAT_OP)
+        idx += 1
+        
     return "".join(processed_re_pass2)
 
-def infix_to_postfix(infix_expr):
+
+def infix_to_postfix(infix_expr): # Used by Thompson
     if not infix_expr: return ""
     preprocessed_infix = preprocess_regex(infix_expr)
     if not preprocessed_infix: return ""
@@ -112,7 +150,7 @@ def infix_to_postfix(infix_expr):
                 stack.pop()
             else:
                 raise ValueError(f"Mismatched parentheses in regex: '{infix_expr}' -> '{preprocessed_infix}'")
-        elif char_code in REGEX_META_OPERATORS:
+        elif char_code in ['*', CONCAT_OP, '|', '+', '?']: # Include + and ? for Thompson
             while stack and stack[-1] != '(' and precedence(stack[-1]) >= precedence(char_code):
                 postfix.append(stack.pop())
             stack.append(char_code)
@@ -124,54 +162,3 @@ def infix_to_postfix(infix_expr):
             raise ValueError(f"Mismatched parentheses (remaining '(') in regex: '{infix_expr}' -> '{preprocessed_infix}'")
         postfix.append(stack.pop())
     return "".join(postfix)
-
-def infix_to_syntax_tree(infix_expr):
-    if not infix_expr: return None
-    preprocessed_infix = preprocess_regex(infix_expr)
-    if not preprocessed_infix: return None
-
-    operand_stack = [] # Stores RegexSyntaxTreeNode objects
-    operator_stack = []
-
-    def apply_op():
-        op = operator_stack.pop()
-        if op == '*' or op == '+' or op == '?':
-            if not operand_stack: raise ValueError(f"Not enough operands for unary operator {op}")
-            right = operand_stack.pop()
-            node_type = {'*': 'star', '+': 'plus', '?': 'optional'}[op]
-            operand_stack.append(RegexSyntaxTreeNode(op, node_type, left=right))
-        elif op == CONCAT_OP or op == '|':
-            if len(operand_stack) < 2: raise ValueError(f"Not enough operands for binary operator {op}")
-            right = operand_stack.pop()
-            left = operand_stack.pop()
-            node_type = {CONCAT_OP: 'concat', '|': 'union'}[op]
-            operand_stack.append(RegexSyntaxTreeNode(op, node_type, left=left, right=right))
-
-    for char_code in preprocessed_infix:
-        if is_literal_char(char_code):
-            operand_stack.append(RegexSyntaxTreeNode(char_code, 'literal'))
-        elif char_code == '(':
-            operator_stack.append(char_code)
-        elif char_code == ')':
-            while operator_stack and operator_stack[-1] != '(':
-                apply_op()
-            if operator_stack and operator_stack[-1] == '(':
-                operator_stack.pop() # Pop '('
-            else:
-                raise ValueError(f"Mismatched parentheses in regex: '{infix_expr}' -> '{preprocessed_infix}' for tree")
-        elif char_code in REGEX_META_OPERATORS:
-            while operator_stack and operator_stack[-1] != '(' and \
-                  precedence(operator_stack[-1]) >= precedence(char_code):
-                apply_op()
-            operator_stack.append(char_code)
-        else:
-            raise ValueError(f"Unknown character '{char_code}' in preprocessed regex '{preprocessed_infix}' for tree")
-
-    while operator_stack:
-        if operator_stack[-1] == '(':
-            raise ValueError(f"Mismatched parentheses (remaining '(') in regex: '{infix_expr}' -> '{preprocessed_infix}' for tree")
-        apply_op()
-
-    if len(operand_stack) != 1:
-        raise ValueError(f"Invalid expression for tree construction, final stack size: {len(operand_stack)}")
-    return operand_stack[0]

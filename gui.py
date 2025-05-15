@@ -2,10 +2,13 @@
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 
-from automata import (NFA, DFA, NFAState, postfix_to_nfa, syntax_tree_to_nfa, _finalize_nfa_properties,
+from automata import (NFA, DFA, NFAState, postfix_to_nfa, _finalize_nfa_properties,
                       combine_nfas, construct_unminimized_dfa_from_nfa, _minimize_dfa)
 from lexer_core import Lexer, parse_re_file_data
-from regex_utils import infix_to_postfix, infix_to_syntax_tree # Added infix_to_syntax_tree
+from regex_utils import infix_to_postfix 
+
+from syntax_tree_direct_dfa import regex_to_direct_dfa, AugmentedRegexSyntaxTreeNode, PositionNode
+
 from ui_formatters import get_nfa_details_str, get_dfa_table_str, get_dfa_anexo_ii_format
 from tests import TEST_CASES
 
@@ -28,15 +31,21 @@ class LexerGeneratorApp(ctk.CTk):
         self.pattern_order = []
         self.reserved_words_defs = {}
         self.patterns_to_ignore = set()
+        
         self.individual_nfas = {}
         self.combined_nfa_start_obj = None
         self.combined_nfa_accept_map = None
         self.combined_nfa_alphabet = None
-        self.unminimized_dfa = None # New
-        self.dfa = None # This will now store the minimized DFA
+        
+        self.augmented_syntax_trees_followpos = {} 
+        self.followpos_tables_followpos = {}
+        self.direct_dfas_followpos = {} 
+
+        self.unminimized_dfa = None 
+        self.dfa = None 
         self.lexer = None
         self.current_test_name = "Manual"
-        self.nfa_construction_method = "thompson" # Default or set by mode
+        self.active_construction_method = "thompson" 
 
         self.container = ctk.CTkFrame(self, fg_color="transparent")
         self.container.pack(side="top", fill="both", expand=True)
@@ -52,7 +61,7 @@ class LexerGeneratorApp(ctk.CTk):
 
         self.show_frame("StartScreen")
 
-    def show_frame(self, frame_name, nfa_method=None): # Added nfa_method
+    def show_frame(self, frame_name, construction_method=None):
         if self.current_frame_name and self.current_frame_name in self.frames:
             current_frame_obj = self.frames[self.current_frame_name]
             current_frame_obj.pack_forget()
@@ -61,21 +70,42 @@ class LexerGeneratorApp(ctk.CTk):
         frame.pack(pady=20, padx=20, fill="both", expand=True)
         self.current_frame_name = frame_name
         
-        if nfa_method: # Set NFA construction method if provided (for manual modes)
-            self.nfa_construction_method = nfa_method
-            self.current_test_name = f"Manual ({nfa_method.capitalize()})" # Update test name display
+        if construction_method:
+            self.active_construction_method = construction_method
+        
+        current_mode_display_name = "Automático"
+        if self.current_frame_name == "ManualMode":
+            current_mode_display_name = f"Manual ({self.active_construction_method.replace('_', ' ').capitalize()})"
+        self.current_test_name = current_mode_display_name
+
+
+        widgets = self.get_current_mode_widgets()
+        if widgets:
+            is_thompson = (self.active_construction_method == "thompson")
+            if widgets.get("combine_nfas_button"):
+                widgets["combine_nfas_button"].configure(state="disabled") # Always reset then enable if needed
+            
+            process_btn_text = "A. Processar REs "
+            if is_thompson: process_btn_text += "➔ NFAs (Thompson)"
+            else: process_btn_text += "➔ DFAs (Followpos)" # For tree_direct_dfa
+            if widgets.get("process_re_button"):
+                 widgets["process_re_button"].configure(text=process_btn_text)
 
         if frame_name == "AutoTestMode":
-            self.nfa_construction_method = "thompson" # Auto tests use Thompson by default
-            widgets = self.get_current_mode_widgets()
+            self.active_construction_method = "thompson"
+            widgets = self.get_current_mode_widgets() # Re-get widgets for auto mode
+            if widgets and widgets.get("process_re_button"): # Update button text for auto mode
+                 widgets["process_re_button"].configure(text="A. Processar REs ➔ NFAs (Thompson)")
+
             if widgets and widgets.get("re_input_textbox") and \
                not widgets["re_input_textbox"].get("1.0", "end-1c").strip() and TEST_CASES:
                 self.load_test_data_for_auto_mode(TEST_CASES[0], show_message=False)
+        
+        self.reset_app_state()
 
     def _create_start_screen(self):
         frame = ctk.CTkFrame(self.container, fg_color=("gray90", "gray10")) 
         self.frames["StartScreen"] = frame
-
         title_frame = ctk.CTkFrame(frame, fg_color="transparent")
         title_frame.pack(pady=(max(self.winfo_height() // 7, 60), 20), padx=20, fill="x")
         app_icon_label = ctk.CTkLabel(title_frame, text="🛠️", font=("Segoe UI Emoji", 48))
@@ -88,26 +118,23 @@ class LexerGeneratorApp(ctk.CTk):
         buttons_frame = ctk.CTkFrame(frame, fg_color="transparent")
         buttons_frame.pack(pady=40, padx=80, fill="x")
         buttons_frame.grid_columnconfigure((0,1), weight=1)
-        buttons_frame.grid_rowconfigure((0,1), weight=1) # Added for new row
+        buttons_frame.grid_rowconfigure((0,1), weight=1)
 
         manual_thompson_button = ctk.CTkButton(buttons_frame, text="📝 Modo Manual (Thompson)",
-                                      command=lambda: self.show_frame("ManualMode", nfa_method="thompson"),
-                                      height=70, font=self.font_button,
-                                      hover_color=ctk.ThemeManager.theme["CTkButton"]["fg_color"]) 
+                                      command=lambda: self.show_frame("ManualMode", construction_method="thompson"),
+                                      height=70, font=self.font_button)
         manual_thompson_button.grid(row=0, column=0, padx=15, pady=15, sticky="ew")
 
-        manual_tree_button = ctk.CTkButton(buttons_frame, text="🌳 Modo Manual (Árvore)",
-                                      command=lambda: self.show_frame("ManualMode", nfa_method="tree"),
-                                      height=70, font=self.font_button,
-                                      hover_color=ctk.ThemeManager.theme["CTkButton"]["fg_color"]) 
+        manual_tree_button = ctk.CTkButton(buttons_frame, text="🌳 Modo Manual (Followpos)",
+                                      command=lambda: self.show_frame("ManualMode", construction_method="tree_direct_dfa"),
+                                      height=70, font=self.font_button)
         manual_tree_button.grid(row=0, column=1, padx=15, pady=15, sticky="ew")
 
-        auto_button = ctk.CTkButton(buttons_frame, text="⚙️ Modo Automático (Testes)",
+        auto_button = ctk.CTkButton(buttons_frame, text="⚙️ Modo Automático (Testes via Thompson)",
                                     command=lambda: self.show_frame("AutoTestMode"),
-                                    height=70, font=self.font_button,
-                                    hover_color=ctk.ThemeManager.theme["CTkButton"]["fg_color"])
-        auto_button.grid(row=1, column=0, columnspan=2, padx=15, pady=15, sticky="ew") # Spans 2 columns
-
+                                    height=70, font=self.font_button)
+        auto_button.grid(row=1, column=0, columnspan=2, padx=15, pady=15, sticky="ew")
+        
         bottom_frame = ctk.CTkFrame(frame, fg_color="transparent")
         bottom_frame.pack(side="bottom", pady=(20, max(self.winfo_height() // 10, 40)), padx=20, fill="x")
         credits_label = ctk.CTkLabel(bottom_frame, text="Desenvolvido por: Pedro Taglialenha, Vitor Praxedes & Enrico Caliolo", font=self.font_credits, text_color=("gray50", "gray50"))
@@ -134,15 +161,15 @@ class LexerGeneratorApp(ctk.CTk):
         load_re_file_button.pack(pady=5, padx=10, fill="x")
         widgets["load_re_file_button"] = load_re_file_button
 
-        process_re_button = ctk.CTkButton(outer_control_frame, text="A. Processar REs ➔ NFAs", command=self.process_regular_expressions)
+        process_re_button = ctk.CTkButton(outer_control_frame, text="A. Processar REs ...", command=self.process_regular_expressions)
         process_re_button.pack(pady=(10,3), padx=10, fill="x")
         widgets["process_re_button"] = process_re_button
 
-        combine_nfas_button = ctk.CTkButton(outer_control_frame, text="B. Unir NFAs (ε)", command=self.combine_all_nfas, state="disabled")
+        combine_nfas_button = ctk.CTkButton(outer_control_frame, text="B. Unir NFAs (Thompson)", command=self.combine_all_nfas, state="disabled")
         combine_nfas_button.pack(pady=3, padx=10, fill="x")
         widgets["combine_nfas_button"] = combine_nfas_button
 
-        generate_dfa_button = ctk.CTkButton(outer_control_frame, text="C. Determinizar NFA ➔ AFD", command=self.generate_dfa_from_nfa, state="disabled")
+        generate_dfa_button = ctk.CTkButton(outer_control_frame, text="C. Gerar AFD Final", command=self.generate_final_dfa_and_minimize, state="disabled")
         generate_dfa_button.pack(pady=3, padx=10, fill="x")
         widgets["generate_dfa_button"] = generate_dfa_button
         
@@ -166,8 +193,8 @@ class LexerGeneratorApp(ctk.CTk):
         display_tab_view = ctk.CTkTabview(parent_frame) 
         display_tab_view.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
         widgets["display_tab_view"] = display_tab_view
-
-        tab_names = ["REs & NFAs Ind.", "NFA Combinado", "AFD (Tabela)", "Tokens Gerados"]
+        
+        tab_names = ["Construção Detalhada", "Autômato Intermediário / Direto", "AFD Final (Tabelas)", "Tokens Gerados"]
         textboxes_map = {} 
         for name in tab_names:
             tab = display_tab_view.add(name)
@@ -183,9 +210,8 @@ class LexerGeneratorApp(ctk.CTk):
         frame = ctk.CTkFrame(self.container)
         self.frames["ManualMode"] = frame
         self.manual_mode_widgets = self._create_shared_controls_and_display(frame)
-        self.manual_mode_widgets["re_input_textbox"].insert("0.0", "# Defina suas expressões regulares aqui.\n")
+        self.manual_mode_widgets["re_input_textbox"].insert("0.0", "# Defina suas expressões regulares aqui.\n# Ex: ID: (a|b)*abb\n")
         self.manual_mode_widgets["source_code_input_textbox"].insert("0.0", "// Código fonte para teste.")
-
 
     def _create_auto_test_mode_frame(self):
         frame = ctk.CTkFrame(self.container)
@@ -193,28 +219,21 @@ class LexerGeneratorApp(ctk.CTk):
         self.auto_test_mode_widgets = self._create_shared_controls_and_display(frame) 
         
         scrollable_control_panel = self.auto_test_mode_widgets["control_frame"] 
-        
         back_button_ref = self.auto_test_mode_widgets.get("back_button")
-        if back_button_ref:
-            back_button_ref.pack_forget()
+        if back_button_ref: back_button_ref.pack_forget()
 
-        ctk.CTkLabel(scrollable_control_panel, text="3. Selecionar Teste Automático:", font=("Arial", 13, "bold")).pack(pady=(15,5), padx=10, anchor="w", fill="x")
+        ctk.CTkLabel(scrollable_control_panel, text="3. Selecionar Teste Automático (via Thompson):", font=("Arial", 13, "bold")).pack(pady=(15,5), padx=10, anchor="w", fill="x")
         inner_scrollable_test_buttons = ctk.CTkScrollableFrame(scrollable_control_panel, height=120) 
         inner_scrollable_test_buttons.pack(pady=5, padx=10, fill="x")
-
         for i, test_case in enumerate(TEST_CASES):
             btn = ctk.CTkButton(inner_scrollable_test_buttons, text=f"Carregar: {test_case['name']}",
                                 command=lambda tc=test_case: self.load_test_data_for_auto_mode(tc))
             btn.pack(pady=3, fill="x")
-        
-        if back_button_ref:
-            back_button_ref.pack(pady=(20,10), padx=10, fill="x")
+        if back_button_ref: back_button_ref.pack(pady=(20,10), padx=10, fill="x")
 
     def get_current_mode_widgets(self):
-        if self.current_frame_name == "ManualMode":
-            return self.manual_mode_widgets
-        elif self.current_frame_name == "AutoTestMode":
-            return self.auto_test_mode_widgets
+        if self.current_frame_name == "ManualMode": return self.manual_mode_widgets
+        elif self.current_frame_name == "AutoTestMode": return self.auto_test_mode_widgets
         return None
 
     def _update_text_content(self, textbox_widget, content):
@@ -227,21 +246,19 @@ class LexerGeneratorApp(ctk.CTk):
         widgets = self.get_current_mode_widgets()
         if not widgets or "textboxes_map" not in widgets: return 
         textbox = widgets["textboxes_map"].get(tab_key_name)
-        if textbox:
-            self._update_text_content(textbox, content_str) 
+        if textbox: self._update_text_content(textbox, content_str)
 
     def _set_re_definitions_for_current_mode(self, content):
         widgets = self.get_current_mode_widgets()
         if not widgets: return
         self._update_text_content(widgets["re_input_textbox"], content)
-        self.reset_app_state() # Reset state when RE defs change
+        self.reset_app_state()
 
     def _set_source_code_for_current_mode(self, content):
         widgets = self.get_current_mode_widgets()
         if not widgets: return
         self._update_text_content(widgets["source_code_input_textbox"], content) 
-        if self.dfa: # If DFA (minimized) exists
-             self._update_display("Tokens Gerados", f"({self.current_test_name}: Texto fonte alterado, reanalisar)")
+        if self.dfa: self._update_display("Tokens Gerados", f"({self.current_test_name}: Texto fonte alterado, reanalisar)")
     
     def load_re_from_file_for_current_mode(self):
         widgets = self.get_current_mode_widgets()
@@ -251,171 +268,286 @@ class LexerGeneratorApp(ctk.CTk):
             try:
                 with open(filepath, 'r', encoding='utf-8') as f_in: content = f_in.read()
                 self._set_re_definitions_for_current_mode(content)
-                # Update current_test_name based on mode, if manual
-                if self.current_frame_name == "ManualMode":
-                    self.current_test_name = f"Arquivo ({self.nfa_construction_method.capitalize()}): {filepath.split('/')[-1]}"
-                else: # AutoTestMode
-                    self.current_test_name = f"Arquivo: {filepath.split('/')[-1]}"
+                method_name = self.active_construction_method.replace('_', ' ').capitalize()
+                self.current_test_name = f"Arquivo ({method_name}): {filepath.split('/')[-1]}"
                 messagebox.showinfo("Sucesso", f"Arquivo '{filepath.split('/')[-1]}' carregado.")
             except Exception as e: messagebox.showerror("Erro ao Ler Arquivo", str(e))
 
     def load_test_data_for_auto_mode(self, test_case, show_message=True):
-        if self.current_frame_name != "AutoTestMode":
-             self.show_frame("AutoTestMode") # This will set nfa_construction_method to thompson
-        
+        if self.current_frame_name != "AutoTestMode": self.show_frame("AutoTestMode")
+        self.active_construction_method = "thompson"
         self._set_re_definitions_for_current_mode(test_case["re_definitions"])
         self._set_source_code_for_current_mode(test_case["source_code"])
-        self.current_test_name = test_case["name"] # Specific test case name
-        
+        self.current_test_name = test_case["name"]
         if show_message and hasattr(self, 'auto_test_mode_widgets') and self.auto_test_mode_widgets["control_frame"].winfo_ismapped():
-             messagebox.showinfo("Teste Carregado", f"Teste '{test_case['name']}' carregado no Modo Automático.")
+             messagebox.showinfo("Teste Carregado", f"Teste '{test_case['name']}' carregado (via Thompson).")
 
     def reset_app_state(self):
-        self.definitions.clear()
-        self.pattern_order.clear()
-        self.reserved_words_defs.clear()
-        self.patterns_to_ignore.clear()
-        self.individual_nfas.clear()
-        self.combined_nfa_start_obj = None; self.combined_nfa_accept_map = None; self.combined_nfa_alphabet = None
-        self.unminimized_dfa = None # Reset unminimized DFA
-        self.dfa = None; self.lexer = None
+        self.definitions.clear(); self.pattern_order.clear(); self.reserved_words_defs.clear(); self.patterns_to_ignore.clear()
+        self.individual_nfas.clear(); self.combined_nfa_start_obj = None; self.combined_nfa_accept_map = None; self.combined_nfa_alphabet = None
+        self.augmented_syntax_trees_followpos.clear(); self.followpos_tables_followpos.clear(); self.direct_dfas_followpos.clear()
+        self.unminimized_dfa = None; self.dfa = None; self.lexer = None
+        
         widgets = self.get_current_mode_widgets()
-        if not widgets or "textboxes_map" not in widgets : return
-        for tab_name in widgets["textboxes_map"]: self._update_display(tab_name, "")
+        if not widgets: return
+
+        for tab_name_key in widgets["textboxes_map"]: self._update_display(tab_name_key, "")
+        
         widgets["process_re_button"].configure(state="normal")
-        widgets["combine_nfas_button"].configure(state="disabled")
-        widgets["generate_dfa_button"].configure(state="disabled")
-        widgets["save_dfa_button"].configure(state="disabled")
-        widgets["tokenize_button"].configure(state="disabled")
+        is_thompson = (self.active_construction_method == "thompson")
+        
+        combine_btn = widgets.get("combine_nfas_button")
+        if combine_btn: combine_btn.configure(state="disabled") # Default disabled
+        
+        gen_dfa_btn = widgets.get("generate_dfa_button")
+        if gen_dfa_btn: gen_dfa_btn.configure(state="disabled")
+
+        save_dfa_btn = widgets.get("save_dfa_button")
+        if save_dfa_btn: save_dfa_btn.configure(state="disabled")
+
+        tokenize_btn = widgets.get("tokenize_button")
+        if tokenize_btn: tokenize_btn.configure(state="disabled")
+
 
     def process_regular_expressions(self):
         widgets = self.get_current_mode_widgets()
         if not widgets: return
         re_content = widgets["re_input_textbox"].get("1.0", "end-1c").strip()
         if not re_content: messagebox.showerror("Entrada Vazia", "Nenhuma definição regular fornecida."); return
+        
+        self.reset_app_state() 
+        
+        is_thompson_method = (self.active_construction_method == "thompson")
+        btn_text = "A. Processar REs "
+        if is_thompson_method: btn_text += "➔ NFAs (Thompson)"
+        else: btn_text += "➔ DFAs (Followpos)"
+        widgets["process_re_button"].configure(text=btn_text, state="normal")
+
+
         try:
-            self.individual_nfas.clear(); self.combined_nfa_start_obj = None; self.unminimized_dfa = None; self.dfa = None; self.lexer = None
-            for tab_key in ["REs & NFAs Ind.", "NFA Combinado", "AFD (Tabela)", "Tokens Gerados"]: self._update_display(tab_key, "")
             NFA.reset_state_ids()
+            PositionNode.reset_id_counter()
+            DFA._next_dfa_id = 0 # Global reset for DFA IDs for each processing run
+            DFA._state_map = {}   # Ensure DFA class static/shared map is clear
+
             self.definitions, self.pattern_order, self.reserved_words_defs, self.patterns_to_ignore = parse_re_file_data(re_content)
             
-            output_str_builder = [f"Processando Definições ({self.current_test_name} - Método NFA: {self.nfa_construction_method.capitalize()}):\n"]
-            if self.patterns_to_ignore: output_str_builder.append(f"(Padrões ignorados: {', '.join(sorted(list(self.patterns_to_ignore)))})\n")
-            output_str_builder.append("\n"); has_any_valid_nfa = False
-
-            for name in self.pattern_order:
-                regex_str = self.definitions.get(name, "");
-                if not regex_str: continue
-                output_str_builder.append(f"Definição: {name}: {regex_str}\n")
-                nfa = None
-                try:
-                    if self.nfa_construction_method == "thompson":
-                        postfix_expr = infix_to_postfix(regex_str)
-                        if not postfix_expr: output_str_builder.append(f"  Expressão Pós-fixada: (VAZIA para '{regex_str}')\n")
-                        else: output_str_builder.append(f"  Expressão Pós-fixada: {postfix_expr}\n"); nfa = postfix_to_nfa(postfix_expr)
-                    elif self.nfa_construction_method == "tree":
-                        syntax_tree = infix_to_syntax_tree(regex_str)
-                        if not syntax_tree: output_str_builder.append(f"  Árvore Sintática: (VAZIA para '{regex_str}')\n")
-                        else: output_str_builder.append(f"  Árvore Sintática (Pré-processado: {syntax_tree.value if syntax_tree else 'N/A'}):\n{syntax_tree}\n"); nfa = syntax_tree_to_nfa(syntax_tree); nfa = _finalize_nfa_properties(nfa)
-                    
-                    if nfa: self.individual_nfas[name] = nfa; output_str_builder.append(get_nfa_details_str(nfa, f"NFA para '{name}'") + "\n\n"); has_any_valid_nfa = True
-                    else: output_str_builder.append("  NFA: (Não gerado)\n\n")
-                except Exception as ve_re: output_str_builder.append(f"  ERRO em '{name}': {type(ve_re).__name__} - {ve_re}\n\n"); self.individual_nfas[name] = None
+            construction_details_builder = [f"Processando Definições ({self.current_test_name}):\n"]
+            if self.patterns_to_ignore: construction_details_builder.append(f"(Padrões ignorados: {', '.join(sorted(list(self.patterns_to_ignore)))})\n")
+            construction_details_builder.append("\n")
             
-            self._update_display("REs & NFAs Ind.", "".join(output_str_builder))
-            if widgets.get("display_tab_view"): widgets["display_tab_view"].set("REs & NFAs Ind.")
-            if has_any_valid_nfa and any(nfa_obj for nfa_obj in self.individual_nfas.values()):
-                if widgets.get("combine_nfas_button"): widgets["combine_nfas_button"].configure(state="normal")
+            process_successful = False
+
+            if self.active_construction_method == "thompson":
+                has_any_valid_nfa = False
+                for name in self.pattern_order:
+                    regex_str = self.definitions.get(name, "")
+                    if not regex_str: continue
+                    construction_details_builder.append(f"Definição: {name}: {regex_str}\n")
+                    try:
+                        postfix_expr = infix_to_postfix(regex_str)
+                        construction_details_builder.append(f"  Pós-fixada: {postfix_expr if postfix_expr else '(VAZIA)'}\n")
+                        nfa = postfix_to_nfa(postfix_expr)
+                        if nfa: 
+                            self.individual_nfas[name] = nfa
+                            construction_details_builder.append(get_nfa_details_str(nfa, f"NFA para '{name}'") + "\n\n")
+                            has_any_valid_nfa = True
+                        else: construction_details_builder.append("  NFA: (Não gerado)\n\n")
+                    except Exception as ve_re: construction_details_builder.append(f"  ERRO NFA '{name}': {ve_re}\n\n")
+                process_successful = has_any_valid_nfa
+                if process_successful and widgets.get("combine_nfas_button"): widgets["combine_nfas_button"].configure(state="normal")
+
+            elif self.active_construction_method == "tree_direct_dfa":
+                # For tree_direct_dfa, we create one DFA per RE definition for now to show intermediate steps.
+                # A "final" DFA would ideally be from a combined RE.
+                has_any_valid_direct_dfa = False
+                temp_direct_dfa_display = []
+
+                for name in self.pattern_order:
+                    regex_str = self.definitions.get(name, "")
+                    if not regex_str: continue
+                    construction_details_builder.append(f"Definição: {name}: {regex_str}\n")
+                    try:
+                        # Each call to regex_to_direct_dfa will use a fresh DFA object internally due to how it's structured
+                        # And PositionNode IDs are reset once at the start of process_regular_expressions
+                        direct_dfa, aug_tree, pos_map = regex_to_direct_dfa(regex_str, name) # name is pattern_name_for_dfa
+                        if direct_dfa and aug_tree and pos_map:
+                            self.direct_dfas_followpos[name] = direct_dfa
+                            self.augmented_syntax_trees_followpos[name] = aug_tree
+                            self.followpos_tables_followpos[name] = pos_map
+                            
+                            construction_details_builder.append(f"  Árvore Aumentada para '{name}':\n{aug_tree}\n")
+                            fp_details = ["  Tabela Followpos:"]
+                            for pid_sorted in sorted(pos_map.keys()): # Sort for consistent display
+                                pnode = pos_map[pid_sorted]
+                                fp_str_ids = sorted([str(fp.id) for fp in pnode.followpos])
+                                fp_details.append(f"    {pnode}: {{ {', '.join(fp_str_ids)} }}")
+                            construction_details_builder.append("\n".join(fp_details) + "\n")
+                            temp_direct_dfa_display.append(get_dfa_table_str(direct_dfa, f"DFA Direto (não minimizado) para '{name}'"))
+                            has_any_valid_direct_dfa = True
+                        else: construction_details_builder.append("  DFA Direto: (Não gerado ou regex vazia/epsilon)\n\n")
+                    except Exception as ve_re: construction_details_builder.append(f"  ERRO DFA Direto '{name}': {ve_re}\n\n");
+                
+                process_successful = has_any_valid_direct_dfa
+                if process_successful and widgets.get("generate_dfa_button"):
+                    widgets["generate_dfa_button"].configure(state="normal")
+                
+                # Display the individual direct DFAs in the "Autômato Intermediário / Direto" tab
+                self._update_display("Autômato Intermediário / Direto", "\n\n".join(temp_direct_dfa_display))
+                if widgets.get("display_tab_view"): widgets["display_tab_view"].set("Autômato Intermediário / Direto")
+
+
+            self._update_display("Construção Detalhada", "".join(construction_details_builder))
+            if widgets.get("display_tab_view") and self.active_construction_method == "thompson":
+                 widgets["display_tab_view"].set("Construção Detalhada")
+            
+            if not process_successful:
+                 messagebox.showwarning("Processamento Parcial", f"({self.current_test_name}): Algumas ou todas as REs falharam.")
             else:
-                if widgets.get("combine_nfas_button"): widgets["combine_nfas_button"].configure(state="disabled")
-            for btn_key in ["generate_dfa_button", "save_dfa_button", "tokenize_button"]:
-                 if widgets.get(btn_key): widgets[btn_key].configure(state="disabled")
-            messagebox.showinfo("Sucesso (Etapa A)", f"({self.current_test_name}): Processamento de REs e NFAs ({self.nfa_construction_method.capitalize()}) concluído.")
+                messagebox.showinfo("Sucesso (Etapa A)", f"({self.current_test_name}): Processamento de REs concluído.")
+
         except Exception as e:
             messagebox.showerror("Erro na Etapa A", f"({self.current_test_name}): {type(e).__name__}: {str(e)}")
-            self._update_display("REs & NFAs Ind.", f"Erro: {type(e).__name__}: {str(e)}")
-            if widgets.get("combine_nfas_button"): widgets["combine_nfas_button"].configure(state="disabled")
+            self._update_display("Construção Detalhada", f"Erro: {str(e)}")
 
 
     def combine_all_nfas(self):
         widgets = self.get_current_mode_widgets()
-        if not widgets: return
+        if not widgets or self.active_construction_method != "thompson": return
+        if not self.individual_nfas: messagebox.showerror("Sem NFAs", "Nenhum NFA individual (Thompson) para combinar."); return
+        
         nfas_for_combination = {k: v for k,v in self.individual_nfas.items() if v is not None}
-        if not nfas_for_combination: messagebox.showerror("Sem NFAs", f"({self.current_test_name}): Nenhum NFA individual válido para combinar."); return
+        if not nfas_for_combination: messagebox.showerror("Sem NFAs Válidos", "Nenhum NFA individual válido para combinar."); return
+
         try:
             self.combined_nfa_start_obj, self.combined_nfa_accept_map, self.combined_nfa_alphabet = combine_nfas(nfas_for_combination)
-            if not self.combined_nfa_start_obj: messagebox.showerror("Erro Combinação", f"({self.current_test_name}): Falha ao criar NFA combinado."); widgets["generate_dfa_button"].configure(state="disabled"); return
-            combined_nfa_shell_for_display = NFA(self.combined_nfa_start_obj, None) # No single accept state for combined
-            output_str = get_nfa_details_str(combined_nfa_shell_for_display, "NFA Combinado Global", combined_accept_map=self.combined_nfa_accept_map)
-            self._update_display("NFA Combinado", output_str)
-            if widgets.get("display_tab_view"): widgets["display_tab_view"].set("NFA Combinado")
+            if not self.combined_nfa_start_obj:
+                messagebox.showerror("Erro Combinação", "Falha ao criar NFA combinado."); return
+            
+            combined_nfa_shell = NFA(self.combined_nfa_start_obj, None)
+            output_str = get_nfa_details_str(combined_nfa_shell, "NFA Combinado Global (Thompson)", combined_accept_map=self.combined_nfa_accept_map)
+            self._update_display("Autômato Intermediário / Direto", output_str)
+            if widgets.get("display_tab_view"): widgets["display_tab_view"].set("Autômato Intermediário / Direto")
             if widgets.get("generate_dfa_button"): widgets["generate_dfa_button"].configure(state="normal")
-            for btn_key in ["save_dfa_button", "tokenize_button"]:
-                 if widgets.get(btn_key): widgets[btn_key].configure(state="disabled")
-            messagebox.showinfo("Sucesso (Etapa B)", f"({self.current_test_name}): NFAs combinados.")
+            messagebox.showinfo("Sucesso (Etapa B - Thompson)", "NFAs combinados.")
         except Exception as e:
-            messagebox.showerror("Erro Etapa B", f"({self.current_test_name}): {type(e).__name__}: {str(e)}")
-            self._update_display("NFA Combinado", f"Erro: {type(e).__name__}: {str(e)}")
-            if widgets.get("generate_dfa_button"): widgets["generate_dfa_button"].configure(state="disabled")
+            messagebox.showerror("Erro Etapa B - Thompson", f"{type(e).__name__}: {str(e)}")
+            self._update_display("Autômato Intermediário / Direto", f"Erro: {str(e)}")
 
 
-    def generate_dfa_from_nfa(self):
+    def generate_final_dfa_and_minimize(self):
         widgets = self.get_current_mode_widgets()
         if not widgets: return
-        if not self.combined_nfa_start_obj or self.combined_nfa_accept_map is None or self.combined_nfa_alphabet is None: messagebox.showerror("NFA Ausente", f"({self.current_test_name}): NFA combinado não pronto."); return
+
+        dfa_output_str_parts = []
+        self.unminimized_dfa = None # Clear previous
+        self.dfa = None             # Clear previous
+
         try:
-            self.unminimized_dfa = construct_unminimized_dfa_from_nfa(self.combined_nfa_start_obj, self.combined_nfa_accept_map, self.combined_nfa_alphabet, self.pattern_order)
-            self.dfa = _minimize_dfa(self.unminimized_dfa) # dfa is now the minimized one
+            DFA._next_dfa_id = 0 # Reset for new DFA construction
+            DFA._state_map = {}  # Clear map
+
+            if self.active_construction_method == "thompson":
+                if not self.combined_nfa_start_obj:
+                    messagebox.showerror("NFA Ausente", "NFA combinado (Thompson) não pronto."); return
+                
+                self.unminimized_dfa = construct_unminimized_dfa_from_nfa(
+                    self.combined_nfa_start_obj, self.combined_nfa_accept_map,
+                    self.combined_nfa_alphabet, self.pattern_order
+                )
+                dfa_output_str_parts.append(get_dfa_table_str(self.unminimized_dfa, title_prefix="AFD (de NFA Combinado) Não Minimizado: "))
             
-            unmin_str = get_dfa_table_str(self.unminimized_dfa, title_prefix="Unminimized ")
-            min_str = get_dfa_table_str(self.dfa, title_prefix="Minimized ")
-            output_str = f"{unmin_str}\n\n====================\n\n{min_str}"
+            elif self.active_construction_method == "tree_direct_dfa":
+                if not self.direct_dfas_followpos:
+                    messagebox.showerror("DFAs Diretos Ausentes", "Nenhum DFA direto (Followpos) gerado na Etapa A."); return
+                
+                # For multiple REs with followpos, a true "combined" DFA needs a more complex setup.
+                # Current `regex_to_direct_dfa` handles one RE.
+                # If multiple REs were processed, `self.direct_dfas_followpos` contains multiple DFAs.
+                # We need one unminimized DFA to proceed.
+                # Strategy: Combine REs with unique end markers then build one DFA.
+                # This is complex to integrate here. For now, if multiple REs, use Thompson strategy
+                # by converting each direct DFA to an NFA (trivial), combining NFAs, then NFA->DFA.
+                # OR, for simplicity, take the *first* direct DFA if only one, or error if multiple.
+
+                if len(self.direct_dfas_followpos) == 1:
+                    first_pattern_name = self.pattern_order[0] # Assuming order matches
+                    self.unminimized_dfa = self.direct_dfas_followpos.get(first_pattern_name)
+                    if self.unminimized_dfa:
+                        dfa_output_str_parts.append(get_dfa_table_str(self.unminimized_dfa, title_prefix=f"AFD Direto (Followpos) para '{first_pattern_name}' Não Minimizado: "))
+                    else:
+                        messagebox.showerror("Erro", "DFA direto não encontrado para o primeiro padrão.")
+                        return
+                else:
+                    # This is the hard part for followpos with multiple patterns.
+                    # The "correct" way is to build (R1|R2|...Rn)# with unique end markers.
+                    # The current `regex_to_direct_dfa` is not set up for this mapping of accept states.
+                    # As a fallback or placeholder for a more advanced combination:
+                    messagebox.showinfo("Info Followpos Múltiplo", 
+                                        "Múltiplas REs com Followpos. "
+                                        "Idealmente, um DFA direto unificado seria construído para (R1|R2|...). "
+                                        "Para demonstração, o primeiro DFA direto será minimizado. "
+                                        "Para um lexer completo, combine as REs antes do Followpos.")
+                    if not self.pattern_order or not self.direct_dfas_followpos.get(self.pattern_order[0]):
+                        messagebox.showerror("Erro", "Nenhum DFA direto disponível para demonstração.")
+                        return
+                    self.unminimized_dfa = self.direct_dfas_followpos[self.pattern_order[0]]
+                    dfa_output_str_parts.append(get_dfa_table_str(self.unminimized_dfa, title_prefix=f"AFD Direto (Followpos) para '{self.pattern_order[0]}' (Não Minimizado): "))
+
+
+            if not self.unminimized_dfa:
+                messagebox.showerror("Erro", "Nenhum AFD não minimizado foi gerado ou selecionado para esta etapa.")
+                return
+
+            self.dfa = _minimize_dfa(self.unminimized_dfa) # self.dfa is now the minimized one
+            dfa_output_str_parts.append(get_dfa_table_str(self.dfa, title_prefix="AFD Minimizado: "))
             
-            self._update_display("AFD (Tabela)", output_str)
-            if widgets.get("display_tab_view"): widgets["display_tab_view"].set("AFD (Tabela)")
+            self._update_display("AFD Final (Tabelas)", "\n\n====================\n\n".join(dfa_output_str_parts))
+            if widgets.get("display_tab_view"): widgets["display_tab_view"].set("AFD Final (Tabelas)")
             
-            self.lexer = Lexer(self.dfa, self.reserved_words_defs, self.patterns_to_ignore) # Lexer uses minimized DFA
+            self.lexer = Lexer(self.dfa, self.reserved_words_defs, self.patterns_to_ignore)
             if widgets.get("tokenize_button"): widgets["tokenize_button"].configure(state="normal")
-            if widgets.get("save_dfa_button"): widgets["save_dfa_button"].configure(state="normal") # Can save minimized
-            messagebox.showinfo("Sucesso (Etapa C)", f"({self.current_test_name}): AFD (Não Minimizado e Minimizado) gerado. Lexer pronto com AFD Minimizado.")
+            if widgets.get("save_dfa_button"): widgets["save_dfa_button"].configure(state="normal")
+            messagebox.showinfo("Sucesso (Etapa C)", "AFD Final (Não Minimizado e Minimizado) gerado. Lexer pronto.")
+
         except Exception as e:
             messagebox.showerror("Erro Etapa C", f"({self.current_test_name}): {type(e).__name__}: {str(e)}")
-            self._update_display("AFD (Tabela)", f"Erro: {type(e).__name__}: {str(e)}")
+            self._update_display("AFD Final (Tabelas)", f"Erro: {str(e)}")
+            # Disable buttons if error
             if widgets.get("tokenize_button"): widgets["tokenize_button"].configure(state="disabled")
             if widgets.get("save_dfa_button"): widgets["save_dfa_button"].configure(state="disabled")
 
 
-    def save_dfa_to_file(self): # Saves the MINIMIZED DFA
-        if not self.dfa: messagebox.showerror("Sem AFD Minimizado", f"({self.current_test_name}): Nenhum AFD minimizado para salvar."); return
+    def save_dfa_to_file(self):
+        if not self.dfa: messagebox.showerror("Sem AFD Minimizado", "Nenhum AFD minimizado para salvar."); return
         filepath = filedialog.asksaveasfilename(defaultextension=".dfa.txt", filetypes=(("DFA Text files", "*.dfa.txt"),("Text files", "*.txt"), ("All files", "*.*")), title=f"Salvar Tabela AFD Minimizada ({self.current_test_name})")
         if filepath:
             try:
-                anexo_ii_content = get_dfa_anexo_ii_format(self.dfa) # Uses minimized
+                anexo_ii_content = get_dfa_anexo_ii_format(self.dfa)
                 with open(filepath, 'w', encoding='utf-8') as f_out: f_out.write(anexo_ii_content)
                 
-                # Also save readable versions of both unminimized and minimized
-                hr_filepath_min = filepath.replace(".dfa.txt", "_minimized_readable.txt")
-                if hr_filepath_min == filepath: hr_filepath_min += "_minimized_readable"
+                hr_filepath_min = filepath.replace(".dfa.txt", "_min_readable.txt")
+                if hr_filepath_min == filepath: hr_filepath_min = filepath + "_min_readable.txt"
                 hr_content_min = get_dfa_table_str(self.dfa, title_prefix="Minimized ");
                 with open(hr_filepath_min, 'w', encoding='utf-8') as f_hr_min: f_hr_min.write(hr_content_min)
 
                 if self.unminimized_dfa:
-                    hr_filepath_unmin = filepath.replace(".dfa.txt", "_unminimized_readable.txt")
-                    if hr_filepath_unmin == filepath: hr_filepath_unmin += "_unminimized_readable"
+                    hr_filepath_unmin = filepath.replace(".dfa.txt", "_unmin_readable.txt")
+                    if hr_filepath_unmin == filepath: hr_filepath_unmin = filepath + "_unmin_readable.txt"
                     hr_content_unmin = get_dfa_table_str(self.unminimized_dfa, title_prefix="Unminimized ");
                     with open(hr_filepath_unmin, 'w', encoding='utf-8') as f_hr_unmin: f_hr_unmin.write(hr_content_unmin)
 
-                messagebox.showinfo("Sucesso", f"({self.current_test_name}): Tabela AFD Minimizada (Anexo II) e versões legíveis salvas.")
+                messagebox.showinfo("Sucesso", "Tabela AFD Minimizada (Anexo II) e versões legíveis salvas.")
             except Exception as e: messagebox.showerror("Erro Salvar AFD", str(e))
 
     def tokenize_source(self):
         widgets = self.get_current_mode_widgets()
         if not widgets: return
-        if not self.lexer: messagebox.showerror("Lexer Indisponível", f"({self.current_test_name}): Analisador Léxico não gerado."); return
+        if not self.lexer: messagebox.showerror("Lexer Indisponível", "Analisador Léxico não gerado."); return
         source_code = widgets["source_code_input_textbox"].get("1.0", "end-1c")
-        if not source_code: self._update_display("Tokens Gerados", f"({self.current_test_name}: Nenhum texto fonte)"); return
+        if not source_code: self._update_display("Tokens Gerados", "(Nenhum texto fonte)"); return
         try:
-            tokens = self.lexer.tokenize(source_code) # Lexer uses minimized DFA
+            tokens = self.lexer.tokenize(source_code)
             output_lines = [f"Tokens Gerados ({self.current_test_name} - com AFD Minimizado):\n"]
             if not tokens: output_lines.append("(Nenhum token reconhecido)")
             for lexeme, pattern in tokens: output_lines.append(f"<{lexeme}, {pattern if pattern != 'erro!' else 'ERRO!'}>")
@@ -423,4 +555,4 @@ class LexerGeneratorApp(ctk.CTk):
             if widgets.get("display_tab_view"): widgets["display_tab_view"].set("Tokens Gerados")
         except Exception as e:
             messagebox.showerror("Erro Análise Léxica", f"({self.current_test_name}): {type(e).__name__}: {str(e)}")
-            self._update_display("Tokens Gerados", f"Erro: {type(e).__name__}: {str(e)}")
+            self._update_display("Tokens Gerados", f"Erro: {str(e)}")
