@@ -1,4 +1,3 @@
-# gui.py
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import os
@@ -48,6 +47,9 @@ class LexerGeneratorApp(ctk.CTk):
         self.lexer = None
         self.current_test_name = "Manual"
         self.active_construction_method = "thompson" 
+        
+        self.images_output_dir = "imagens"
+
 
         self.container = ctk.CTkFrame(self, fg_color="transparent")
         self.container.pack(side="top", fill="both", expand=True)
@@ -509,7 +511,7 @@ class LexerGeneratorApp(ctk.CTk):
         filename = f"dfa_graph_{test_name_slug}"
         
         try:
-            filepath = draw_dfa_to_file(self.dfa, filename_prefix=filename, view=True)
+            filepath = draw_dfa_to_file(self.dfa, filename_prefix=filename, output_subdir=self.images_output_dir, view=True)
             if filepath:
                 messagebox.showinfo("Desenho AFD", f"Desenho do AFD salvo/aberto em:\n{os.path.abspath(filepath)}")
             else:
@@ -557,6 +559,3 @@ class LexerGeneratorApp(ctk.CTk):
             messagebox.showerror("Erro Análise Léxica", f"({self.current_test_name}): {type(e).__name__}: {str(e)}")
             self._update_display("Tokens Gerados", f"Erro: {str(e)}")
 
-if __name__ == "__main__":
-    app = LexerGeneratorApp()
-    app.mainloop()
