@@ -1,3 +1,4 @@
+# syntax_tree_direct_dfa.py
 from automata import DFA
 from config import EPSILON, CONCAT_OP
 
@@ -62,78 +63,79 @@ def build_augmented_syntax_tree(infix_expr, position_nodes_map):
     
     END_MARKER_SYMBOL = '#' 
     
-    augmented_infix_for_preprocessing = f"({infix_expr}){END_MARKER_SYMBOL}"
-    preprocessed_infix = preprocess_regex(augmented_infix_for_preprocessing)
+    processed_original_re = preprocess_regex(infix_expr)
+    if not processed_original_re:
+        end_marker_pos_node = PositionNode(END_MARKER_SYMBOL)
+        position_nodes_map[end_marker_pos_node.id] = end_marker_pos_node
+        end_marker_tree_node = AugmentedRegexSyntaxTreeNode(END_MARKER_SYMBOL, LITERAL_NODE)
+        end_marker_tree_node.position_node = end_marker_pos_node
+        return end_marker_tree_node, END_MARKER_SYMBOL
 
-    if not preprocessed_infix: return None, None
 
     operand_stack = [] 
     operator_stack = []
 
-    def apply_op_tree_build():
-        op_char = operator_stack.pop()
-        node_type = ''
-        if op_char == '*': node_type = STAR_NODE
-        elif op_char == CONCAT_OP: node_type = CONCAT_NODE
-        elif op_char == '|': node_type = UNION_NODE
-        else: raise ValueError(f"Unexpected operator character '{op_char}' during tree build.")
+    def apply_pending_ops(current_op_precedence=0):
+        while operator_stack and operator_stack[-1] != '(' and \
+              precedence(operator_stack[-1]) >= current_op_precedence:
+            op_char = operator_stack.pop()
+            
+            if op_char == '*':
+                if not operand_stack: raise ValueError(f"Not enough operands for *")
+                child = operand_stack.pop()
+                operand_stack.append(AugmentedRegexSyntaxTreeNode(op_char, STAR_NODE, left=child))
+            elif op_char == '?':
+                if not operand_stack: raise ValueError(f"Not enough operands for ?")
+                child_R = operand_stack.pop()
+                epsilon_node_for_q = AugmentedRegexSyntaxTreeNode(EPSILON, EPSILON_NODE)
+                union_node = AugmentedRegexSyntaxTreeNode('|', UNION_NODE, left=child_R, right=epsilon_node_for_q)
+                operand_stack.append(union_node)
+            elif op_char == '+':
+                raise ValueError("Operator '+' should be expanded or handled with dedicated rules for Followpos tree.")
 
+            elif op_char == CONCAT_OP or op_char == '|':
+                if len(operand_stack) < 2: raise ValueError(f"Not enough operands for {op_char}")
+                right = operand_stack.pop()
+                left = operand_stack.pop()
+                node_type = CONCAT_NODE if op_char == CONCAT_OP else UNION_NODE
+                operand_stack.append(AugmentedRegexSyntaxTreeNode(op_char, node_type, left=left, right=right))
 
-        if node_type == STAR_NODE:
-            if not operand_stack: raise ValueError(f"Not enough operands for {op_char}")
-            child = operand_stack.pop()
-            operand_stack.append(AugmentedRegexSyntaxTreeNode(op_char, node_type, left=child))
-        elif node_type == CONCAT_NODE or node_type == UNION_NODE:
-            if len(operand_stack) < 2: raise ValueError(f"Not enough operands for {op_char}")
-            right = operand_stack.pop()
-            left = operand_stack.pop()
-            operand_stack.append(AugmentedRegexSyntaxTreeNode(op_char, node_type, left=left, right=right))
-
-    for char_code in preprocessed_infix:
-        if is_simple_literal(char_code) or char_code == END_MARKER_SYMBOL:
-            if char_code == EPSILON:
-                node = AugmentedRegexSyntaxTreeNode(char_code, EPSILON_NODE)
-            else:
-                pos_node = PositionNode(char_code)
-                position_nodes_map[pos_node.id] = pos_node
-                node = AugmentedRegexSyntaxTreeNode(char_code, LITERAL_NODE)
-                node.position_node = pos_node
+    for char_code in processed_original_re:
+        if is_simple_literal(char_code) and char_code != EPSILON :
+            pos_node = PositionNode(char_code)
+            position_nodes_map[pos_node.id] = pos_node
+            node = AugmentedRegexSyntaxTreeNode(char_code, LITERAL_NODE)
+            node.position_node = pos_node
             operand_stack.append(node)
         elif char_code == '(':
             operator_stack.append(char_code)
         elif char_code == ')':
-            while operator_stack and operator_stack[-1] != '(':
-                apply_op_tree_build()
-            if operator_stack and operator_stack[-1] == '(': operator_stack.pop()
-            else: raise ValueError(f"Mismatched parentheses for augmented tree: {preprocessed_infix}")
-        elif char_code in ['*', CONCAT_OP, '|']:
-            while operator_stack and operator_stack[-1] != '(' and \
-                  precedence(operator_stack[-1]) >= precedence(char_code):
-                apply_op_tree_build()
+            apply_pending_ops(0) 
+            if not operator_stack or operator_stack[-1] != '(':
+                raise ValueError(f"Mismatched parentheses for augmented tree: {processed_original_re}")
+            operator_stack.pop() 
+        elif char_code in ['*', CONCAT_OP, '|', '?', '+']: 
+            apply_pending_ops(precedence(char_code))
             operator_stack.append(char_code)
-        elif char_code in ['+', '?']:
-             # '+' becomes R.R* ; '?' becomes R | EPSILON_NODE
-             # This explicit expansion here simplifies the compute_functions/followpos
-             # For now, assuming these are expanded in preprocess_regex or not used directly for this algo.
-             # The problem example `aa*(bb*aa*b)*` doesn't use + or ?.
-             # If they are encountered, it means preprocess_regex should handle them.
-             # The current preprocess_regex passes them through.
-             # For the example, this branch won't be hit.
-             # If you need general + and ?, preprocess_regex must expand them.
-            raise ValueError(f"Operators '+' or '?' must be expanded by preprocess_regex. Found: {char_code}")
-        else:
-            raise ValueError(f"Unknown char '{char_code}' in preprocessed regex for augmented tree: {preprocessed_infix}")
+        else: 
+            raise ValueError(f"Unknown char '{char_code}' in preprocessed regex for augmented tree: {processed_original_re}")
 
-    while operator_stack:
-        if operator_stack[-1] == '(': raise ValueError("Mismatched parentheses (remaining '(')")
-        apply_op_tree_build()
+    apply_pending_ops(0) 
 
     if len(operand_stack) != 1:
-        if not operand_stack and not preprocessed_infix: return None, None
-        raise ValueError(f"Invalid expression for augmented tree. Final stack size: {len(operand_stack)}")
+        raise ValueError(f"Invalid expression for augmented tree. Final operand stack size: {len(operand_stack)}")
     
-    final_root = operand_stack[0]
+    re_tree_root = operand_stack[0]
+    
+    end_marker_pos_node = PositionNode(END_MARKER_SYMBOL)
+    position_nodes_map[end_marker_pos_node.id] = end_marker_pos_node
+    end_marker_tree_node = AugmentedRegexSyntaxTreeNode(END_MARKER_SYMBOL, LITERAL_NODE)
+    end_marker_tree_node.position_node = end_marker_pos_node
+
+    final_root = AugmentedRegexSyntaxTreeNode(CONCAT_OP, CONCAT_NODE, left=re_tree_root, right=end_marker_tree_node)
+    
     return final_root, END_MARKER_SYMBOL
+
 
 def compute_functions(node):
     if node is None: return
@@ -180,22 +182,26 @@ def compute_followpos(node):
         for pos_i_obj in node.left.lastpos:
             pos_i_obj.followpos.update(node.left.firstpos)
 
-
 def regex_to_direct_dfa(regex_str, pattern_name_for_dfa):
     PositionNode.reset_id_counter()
     position_nodes_map = {} 
     
     if not regex_str:
         dfa_empty_regex = DFA()
-        dfa_empty_regex.start_state_id = dfa_empty_regex._get_dfa_state_id(frozenset([-1])) # Dummy id for epsilon state
-        dfa_empty_regex.set_accept_state(dfa_empty_regex.start_state_id, pattern_name_for_dfa) # Accepts empty string
+        dfa_empty_regex.start_state_id = dfa_empty_regex._get_dfa_state_id(frozenset([-2]))
         return dfa_empty_regex, None, None
+    
+    if regex_str == EPSILON:
+        dfa_epsilon_regex = DFA()
+        dfa_epsilon_regex.start_state_id = dfa_epsilon_regex._get_dfa_state_id(frozenset([-1]))
+        dfa_epsilon_regex.set_accept_state(dfa_epsilon_regex.start_state_id, pattern_name_for_dfa)
+        return dfa_epsilon_regex, AugmentedRegexSyntaxTreeNode(EPSILON, EPSILON_NODE), {}
+
 
     root, end_marker_char = build_augmented_syntax_tree(regex_str, position_nodes_map)
     
     if not root:
         dfa_fail = DFA()
-        # No start or accept state for completely failed parsing
         return dfa_fail, None, None
 
     compute_functions(root)
@@ -208,9 +214,8 @@ def regex_to_direct_dfa(regex_str, pattern_name_for_dfa):
     s0_positions_nodes = root.firstpos
     s0_positions_ids = frozenset(p.id for p in s0_positions_nodes)
 
-    if not s0_positions_ids and not root.nullable: # Empty language
-        dfa.start_state_id = dfa._get_dfa_state_id(frozenset([-2])) # Non-accepting start
-        # Collect alphabet
+    if not s0_positions_ids and not root.nullable:
+        dfa.start_state_id = dfa._get_dfa_state_id(frozenset([-2]))
         current_alphabet = set()
         for pos_node_obj in position_nodes_map.values():
             if pos_node_obj.symbol != end_marker_char and pos_node_obj.symbol != EPSILON:
@@ -218,8 +223,8 @@ def regex_to_direct_dfa(regex_str, pattern_name_for_dfa):
         dfa.alphabet = current_alphabet
         return dfa, root, position_nodes_map
     
-    if not s0_positions_ids and root.nullable: # Language is just epsilon
-        dfa.start_state_id = dfa._get_dfa_state_id(frozenset([-1])) # Epsilon state ID
+    if not s0_positions_ids and root.nullable:
+        dfa.start_state_id = dfa._get_dfa_state_id(frozenset([-1]))
         dfa.set_accept_state(dfa.start_state_id, pattern_name_for_dfa)
         current_alphabet = set()
         for pos_node_obj in position_nodes_map.values():
@@ -227,7 +232,6 @@ def regex_to_direct_dfa(regex_str, pattern_name_for_dfa):
                 current_alphabet.add(pos_node_obj.symbol)
         dfa.alphabet = current_alphabet
         return dfa, root, position_nodes_map
-
 
     dfa.start_state_id = dfa._get_dfa_state_id(s0_positions_ids)
     dfa_states_map[s0_positions_ids] = dfa.start_state_id
@@ -239,7 +243,10 @@ def regex_to_direct_dfa(regex_str, pattern_name_for_dfa):
             end_marker_pos_id = pos_id_iter
             break
     if end_marker_pos_id is None:
-        raise ValueError("End marker position not found in position_nodes_map.")
+        if not position_nodes_map:
+             return dfa, root, position_nodes_map
+        raise ValueError("End marker position not found in position_nodes_map, but positions exist.")
+
 
     current_alphabet = set()
     for pos_node_obj_iter in position_nodes_map.values():

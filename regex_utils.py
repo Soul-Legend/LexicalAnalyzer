@@ -1,7 +1,7 @@
 # regex_utils.py
 from config import EPSILON, CONCAT_OP
 
-REGEX_META_OPERATORS = "*+?|."
+REGEX_META_OPERATORS = "*+?|." 
 REGEX_GROUPING_SYMBOLS = "()"
 
 def is_literal_char(char_code):
@@ -46,7 +46,6 @@ def expand_char_class(char_class_str):
         return expanded_chars[0]
     
     return "(" + "|".join(expanded_chars) + ")"
-
 
 def preprocess_regex(regex_str):
     current_regex = regex_str

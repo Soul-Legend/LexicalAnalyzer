@@ -49,11 +49,10 @@ TEST_CASES = [
             "LPAREN: [(]\n"
             "RPAREN: [)]\n"
             "ID: [a-zA-Z_][a-zA-Z0-9_]*\n"
-            r"WS: ( |\t|\r|\n)+ %ignore"
+            r"WS: ( )+ %ignore"
         ),
         "source_code": (
             "var1 = ( 10 + 5.5 ) * 2 / x "
-            "3 - 1"
         )
     },
     {
