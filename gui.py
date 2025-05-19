@@ -144,7 +144,7 @@ class LexerGeneratorApp(ctk.CTk):
         
         bottom_frame = ctk.CTkFrame(frame, fg_color="transparent")
         bottom_frame.pack(side="bottom", pady=(20, max(self.winfo_height() // 10, 40)), padx=20, fill="x")
-        credits_label = ctk.CTkLabel(bottom_frame, text="Desenvolvido por: Pedro Taglialenha, Vitor Praxedes & Enrico Caliolo", font=self.font_credits, text_color=("gray50", "gray50"))
+        credits_label = ctk.CTkLabel(bottom_frame, text="Desenvolvido por: Pedro Taglialenha, Vitor Praxedes & Enrico Caliolo ", font=self.font_credits, text_color=("gray50", "gray50"))
         credits_label.pack(pady=(0, 20))
         exit_button = ctk.CTkButton(bottom_frame, text="Sair", command=self.quit, width=120, font=self.font_small_button, fg_color="transparent", border_width=1, border_color=("gray70", "gray30"), hover_color=("gray85", "gray20"))
         exit_button.pack()
