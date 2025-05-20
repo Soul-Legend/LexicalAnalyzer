@@ -1,7 +1,4 @@
-# automata.py
 from config import EPSILON
-# No RegexSyntaxTreeNode from regex_utils needed here for followpos,
-# as syntax_tree_direct_dfa.py has AugmentedRegexSyntaxTreeNode
 
 class NFAState:
     _id_counter = 0
@@ -38,13 +35,16 @@ class NFA:
     def reset_state_ids():
         NFAState._id_counter = 0
 
-def build_nfa_from_char(char):
+def build_nfa_from_char_token(char_token):
     start = NFAState()
     accept = NFAState()
-    start.add_transition(char, accept)
+    
+    actual_char_for_transition = char_token
+    if len(char_token) == 2 and char_token.startswith('\\'):
+        actual_char_for_transition = char_token[1] 
+    
+    start.add_transition(actual_char_for_transition, accept)
     nfa = NFA(start, accept)
-    nfa.states = {start, accept}
-    if char != EPSILON: nfa.alphabet = {char}
     return nfa
 
 def build_nfa_concat(nfa1, nfa2):
@@ -52,8 +52,6 @@ def build_nfa_concat(nfa1, nfa2):
         raise ValueError("Invalid NFAs for concatenation")
     nfa1.accept_state.add_transition(EPSILON, nfa2.start_state)
     new_nfa = NFA(nfa1.start_state, nfa2.accept_state)
-    new_nfa.states = nfa1.states.union(nfa2.states)
-    new_nfa.alphabet = nfa1.alphabet.union(nfa2.alphabet)
     return new_nfa
 
 def build_nfa_union(nfa1, nfa2):
@@ -67,8 +65,6 @@ def build_nfa_union(nfa1, nfa2):
     nfa1.accept_state.add_transition(EPSILON, accept)
     nfa2.accept_state.add_transition(EPSILON, accept)
     new_nfa = NFA(start, accept)
-    new_nfa.states = nfa1.states.union(nfa2.states).union({start, accept})
-    new_nfa.alphabet = nfa1.alphabet.union(nfa2.alphabet)
     return new_nfa
 
 def build_nfa_kleene_star(nfa_operand):
@@ -81,38 +77,28 @@ def build_nfa_kleene_star(nfa_operand):
     nfa_operand.accept_state.add_transition(EPSILON, nfa_operand.start_state) 
     nfa_operand.accept_state.add_transition(EPSILON, accept) 
     new_nfa = NFA(start, accept)
-    new_nfa.states = nfa_operand.states.union({start, accept})
-    new_nfa.alphabet = nfa_operand.alphabet
     return new_nfa
 
 def build_nfa_kleene_plus(nfa_operand): 
     if not nfa_operand or not nfa_operand.start_state or not nfa_operand.accept_state:
         raise ValueError("Invalid NFA for Kleene plus")
-    # R+ is R followed by R*
-    # Or, a loop back from accept to start of R, and one path forward.
-    # Thompson: new_start -> R.start_state; R.accept_state -> new_accept; R.accept_state -> R.start_state (loop)
     start = NFAState()
     accept = NFAState()
     start.add_transition(EPSILON, nfa_operand.start_state)
-    nfa_operand.accept_state.add_transition(EPSILON, nfa_operand.start_state) # Loop back
-    nfa_operand.accept_state.add_transition(EPSILON, accept) # Path to new accept
+    nfa_operand.accept_state.add_transition(EPSILON, nfa_operand.start_state)
+    nfa_operand.accept_state.add_transition(EPSILON, accept)
     new_nfa = NFA(start, accept)
-    new_nfa.states = nfa_operand.states.union({start, accept})
-    new_nfa.alphabet = nfa_operand.alphabet
     return new_nfa
     
 def build_nfa_optional(nfa_operand): 
     if not nfa_operand or not nfa_operand.start_state or not nfa_operand.accept_state:
         raise ValueError("Invalid NFA for optional")
-    # Thompson: new_start -> R.start_state; new_start -> new_accept (skip path); R.accept_state -> new_accept
     start = NFAState()
     accept = NFAState()
     start.add_transition(EPSILON, nfa_operand.start_state) 
-    start.add_transition(EPSILON, accept) # Skip path
+    start.add_transition(EPSILON, accept)
     nfa_operand.accept_state.add_transition(EPSILON, accept)
     new_nfa = NFA(start, accept)
-    new_nfa.states = nfa_operand.states.union({start, accept})
-    new_nfa.alphabet = nfa_operand.alphabet
     return new_nfa
 
 def _finalize_nfa_properties(nfa):
@@ -121,56 +107,67 @@ def _finalize_nfa_properties(nfa):
 
     q = [nfa.start_state]
     visited_traversal = {nfa.start_state}
-    while q:
-        curr = q.pop(0)
-        all_nfa_states.add(curr)
-        for symbol, next_states_set in curr.transitions.items():
-            if symbol != EPSILON: nfa_alphabet.add(symbol)
+    all_nfa_states.add(nfa.start_state)
+
+    head = 0
+    while head < len(q):
+        curr = q[head]
+        head +=1
+        
+        for symbol_in_transition, next_states_set in curr.transitions.items():
+            actual_symbol_for_alphabet = symbol_in_transition
+            if len(symbol_in_transition) == 2 and symbol_in_transition.startswith('\\'):
+                actual_symbol_for_alphabet = symbol_in_transition[1]
+            
+            if symbol_in_transition != EPSILON: 
+                nfa_alphabet.add(actual_symbol_for_alphabet)
+
             for next_s in next_states_set:
+                all_nfa_states.add(next_s)
                 if next_s not in visited_traversal:
                     visited_traversal.add(next_s)
                     q.append(next_s)
+
+    if nfa.accept_state:
+        all_nfa_states.add(nfa.accept_state)
+
     nfa.states = all_nfa_states
     nfa.alphabet = nfa_alphabet
     return nfa
 
-def postfix_to_nfa(postfix_expr):
-    from regex_utils import is_literal_char
+def postfix_to_nfa(postfix_tokens_list):
+    from regex_utils import is_token_literal
     from config import CONCAT_OP
-    if not postfix_expr: return None
+
+    if not postfix_tokens_list: return None
     stack = []
-    for char_code in postfix_expr:
-        if is_literal_char(char_code):
-            stack.append(build_nfa_from_char(char_code))
-        elif char_code == CONCAT_OP:
+    for token in postfix_tokens_list:
+        if is_token_literal(token): # is_token_literal já considera EPSILON
+            stack.append(build_nfa_from_char_token(token))
+        elif token == CONCAT_OP:
             if len(stack) < 2: raise ValueError("Not enough operands for CONCAT")
             nfa2, nfa1 = stack.pop(), stack.pop()
             stack.append(build_nfa_concat(nfa1, nfa2))
-        elif char_code == '|':
+        elif token == '|':
             if len(stack) < 2: raise ValueError("Not enough operands for UNION")
             nfa2, nfa1 = stack.pop(), stack.pop()
             stack.append(build_nfa_union(nfa1, nfa2))
-        elif char_code == '*':
+        elif token == '*':
             if not stack: raise ValueError("Not enough operand for STAR")
             stack.append(build_nfa_kleene_star(stack.pop()))
-        elif char_code == '+':
+        elif token == '+':
             if not stack: raise ValueError("Not enough operand for PLUS")
             stack.append(build_nfa_kleene_plus(stack.pop()))
-        elif char_code == '?':
+        elif token == '?':
             if not stack: raise ValueError("Not enough operand for OPTIONAL")
             stack.append(build_nfa_optional(stack.pop()))
         else:
-            raise ValueError(f"Unknown operator or character '{char_code}' in postfix expression '{postfix_expr}'")
+            raise ValueError(f"Unknown operator or token '{token}' in postfix expression list.")
     if len(stack) != 1:
-        raise ValueError(f"Invalid postfix expression '{postfix_expr}' for NFA construction: stack size is {len(stack)}")
+        raise ValueError(f"Invalid postfix expression list for NFA construction: stack size is {len(stack)}")
     
     final_nfa = stack.pop()
     return _finalize_nfa_properties(final_nfa)
-
-# syntax_tree_to_nfa (Thompson-like blocks guided by tree) is no longer needed here if direct DFA is the goal for "tree mode"
-# It was:
-# def syntax_tree_to_nfa(node): ...
-# This function would be removed or kept only if you want *three* modes (Thompson, Tree-Thompson, Tree-DirectDFA)
 
 def epsilon_closure(nfa_states_set_arg):
     if not isinstance(nfa_states_set_arg, set) and not isinstance(nfa_states_set_arg, frozenset):
@@ -179,7 +176,7 @@ def epsilon_closure(nfa_states_set_arg):
         else: 
             nfa_states_set = set(nfa_states_set_arg)
     else:
-        nfa_states_set = set(nfa_states_set_arg) # Ensure it's mutable for worklist processing
+        nfa_states_set = set(nfa_states_set_arg)
     if not nfa_states_set: return frozenset()
     closure = set(nfa_states_set)
     worklist = list(nfa_states_set) 
@@ -192,11 +189,13 @@ def epsilon_closure(nfa_states_set_arg):
                     worklist.append(next_s)
     return frozenset(closure)
 
-def move(nfa_states_fset, symbol):
+def move(nfa_states_fset, symbol_from_input):
     reachable = set()
     for s in nfa_states_fset:
-        if symbol in s.transitions:
-            reachable.update(s.transitions[symbol])
+        # As transições no NFA são armazenadas com o símbolo real (ex: '+', não '\+')
+        # symbol_from_input é o caractere real da entrada.
+        if symbol_from_input in s.transitions:
+            reachable.update(s.transitions[symbol_from_input])
     return frozenset(reachable)
 
 class DFA:
@@ -210,8 +209,7 @@ class DFA:
         self._next_dfa_id = 0
 
     def _get_dfa_state_id(self, state_representation_fset):
-        # state_representation_fset can be frozenset of NFAState.id OR frozenset of position_ids
-        canonical_key_tuple = tuple(sorted(list(state_representation_fset))) # Ensure order
+        canonical_key_tuple = tuple(sorted(list(state_representation_fset)))
         if canonical_key_tuple not in self._state_map:
             new_id = self._next_dfa_id
             self._state_map[canonical_key_tuple] = new_id
@@ -240,6 +238,9 @@ def _minimize_dfa(unminimized_dfa):
         initial_partition_map.setdefault(key, set()).add(state_id)
     
     P = {frozenset(group) for group in initial_partition_map.values() if group}
+    if not P:
+        return unminimized_dfa
+        
     W = set(P)
 
     while W:
@@ -255,7 +256,7 @@ def _minimize_dfa(unminimized_dfa):
 
             new_P_for_iteration = set() 
             P_changed_in_iteration = False
-            temp_P_list = list(P) # To avoid issues with modifying P while iterating
+            temp_P_list = list(P) 
             for Y in temp_P_list:
                 Y_intersect_X = Y.intersection(X)
                 Y_minus_X = Y.difference(X)
@@ -275,7 +276,7 @@ def _minimize_dfa(unminimized_dfa):
                         else:
                             W.add(frozenset(Y_minus_X))
                 else:
-                    new_P_for_iteration.add(Y) # Keep Y as is
+                    new_P_for_iteration.add(Y)
             if P_changed_in_iteration:
                 P = new_P_for_iteration
     
@@ -284,10 +285,11 @@ def _minimize_dfa(unminimized_dfa):
     partition_map = {} 
     new_state_id_counter = 0
     
-    final_partitions_sorted = sorted([tuple(sorted(list(p))) for p in P])
+    final_partitions_sorted_list_of_tuples = sorted([tuple(sorted(list(p))) for p in P])
+    final_partitions_sorted = [frozenset(p_tuple) for p_tuple in final_partitions_sorted_list_of_tuples]
 
-    for part_tuple in final_partitions_sorted:
-        part_fset = frozenset(part_tuple)
+
+    for part_fset in final_partitions_sorted:
         if part_fset not in partition_map:
             partition_map[part_fset] = new_state_id_counter
             min_dfa.states.add(new_state_id_counter)
@@ -297,18 +299,18 @@ def _minimize_dfa(unminimized_dfa):
                 pattern_name = unminimized_dfa.accept_states[representative_old_state]
                 min_dfa.set_accept_state(new_state_id_counter, pattern_name)
 
-            if unminimized_dfa.start_state_id in part_fset:
+            if unminimized_dfa.start_state_id is not None and unminimized_dfa.start_state_id in part_fset:
                 min_dfa.start_state_id = new_state_id_counter
             
             new_state_id_counter += 1
 
-    for part_fset in P:
+    for part_fset in final_partitions_sorted: 
         new_from_state_id = partition_map[part_fset]
         representative_old_state = next(iter(part_fset))
         for char_code in min_dfa.alphabet:
             old_to_state_id = unminimized_dfa.transitions.get((representative_old_state, char_code), None)
             if old_to_state_id is not None:
-                for target_part_fset in P:
+                for target_part_fset in final_partitions_sorted: 
                     if old_to_state_id in target_part_fset:
                         new_to_state_id = partition_map[target_part_fset]
                         min_dfa.add_transition(new_from_state_id, char_code, new_to_state_id)
@@ -317,17 +319,18 @@ def _minimize_dfa(unminimized_dfa):
 
 def construct_unminimized_dfa_from_nfa(combined_nfa_start, combined_nfa_accept_map, combined_alphabet, pattern_order):
     dfa = DFA()
+    # O alfabeto do DFA é derivado do alfabeto combinado dos NFAs.
+    # Se combined_alphabet já tem os caracteres reais (ex: '.', não '\.'), está correto.
+    # _finalize_nfa_properties deve garantir isso para cada NFA individual, e combine_nfas os une.
     dfa.alphabet = combined_alphabet if combined_alphabet is not None else set()
 
     initial_nfa_set_for_closure = {combined_nfa_start} if combined_nfa_start else set()
     q0_nfa_fset_nfa_states = epsilon_closure(initial_nfa_set_for_closure)
-    # For DFA state mapping, we use the IDs of NFA states in the closure
     q0_nfa_fset_ids = frozenset(s.id for s in q0_nfa_fset_nfa_states)
 
 
     if not q0_nfa_fset_ids : 
         dfa.start_state_id = dfa._get_dfa_state_id(frozenset())
-        # Check if the original single NFA start state (if it was the only one in closure) was an accept state for epsilon
         if combined_nfa_start in combined_nfa_accept_map and not combined_alphabet and len(initial_nfa_set_for_closure)==1 and combined_nfa_start in q0_nfa_fset_nfa_states:
             pattern_name_for_epsilon = combined_nfa_accept_map[combined_nfa_start]
             dfa.set_accept_state(dfa.start_state_id, pattern_name_for_epsilon)
@@ -335,10 +338,8 @@ def construct_unminimized_dfa_from_nfa(combined_nfa_start, combined_nfa_accept_m
 
     dfa.start_state_id = dfa._get_dfa_state_id(q0_nfa_fset_ids)
     
-    # Worklist stores (frozenset_of_NFA_states, dfa_state_id)
-    # The map dfa_q_map stores frozenset_of_NFA_state_IDS -> dfa_state_id
     dfa_q_map = {q0_nfa_fset_ids: dfa.start_state_id} 
-    worklist = [q0_nfa_fset_nfa_states] # Worklist stores actual NFA state objects for move/closure
+    worklist = [q0_nfa_fset_nfa_states] 
 
     while worklist:
         current_nfa_fset_from_worklist_states = worklist.pop(0)
@@ -347,7 +348,7 @@ def construct_unminimized_dfa_from_nfa(combined_nfa_start, combined_nfa_accept_m
 
         current_best_pattern = None
         highest_priority_index = float('inf')
-        for nfa_s_in_subset in current_nfa_fset_from_worklist_states: # Iterate NFA states
+        for nfa_s_in_subset in current_nfa_fset_from_worklist_states:
             if nfa_s_in_subset in combined_nfa_accept_map:
                 pattern_name = combined_nfa_accept_map[nfa_s_in_subset]
                 try:
@@ -355,13 +356,13 @@ def construct_unminimized_dfa_from_nfa(combined_nfa_start, combined_nfa_accept_m
                     if priority < highest_priority_index:
                         highest_priority_index = priority
                         current_best_pattern = pattern_name
-                except ValueError: # Should not happen if pattern_order is well-defined
-                    if current_best_pattern is None: # Fallback if pattern not in order list
+                except ValueError: 
+                    if current_best_pattern is None:
                         current_best_pattern = pattern_name
         if current_best_pattern:
             dfa.set_accept_state(current_dfa_id, current_best_pattern)
 
-        for symbol in sorted(list(dfa.alphabet)):
+        for symbol in sorted(list(dfa.alphabet)): # 'symbol' aqui é o char real do alfabeto
             move_res_fset_states = move(current_nfa_fset_from_worklist_states, symbol)
             if not move_res_fset_states: continue
             
@@ -373,7 +374,7 @@ def construct_unminimized_dfa_from_nfa(combined_nfa_start, combined_nfa_accept_m
             if target_nfa_fset_after_closure_ids not in dfa_q_map:
                 target_dfa_id = dfa._get_dfa_state_id(target_nfa_fset_after_closure_ids)
                 dfa_q_map[target_nfa_fset_after_closure_ids] = target_dfa_id
-                worklist.append(target_nfa_fset_after_closure_states) # Add NFA states to worklist
+                worklist.append(target_nfa_fset_after_closure_states)
             else:
                 target_dfa_id = dfa_q_map[target_nfa_fset_after_closure_ids]
             dfa.add_transition(current_dfa_id, symbol, target_dfa_id)
@@ -386,10 +387,9 @@ def combine_nfas(nfas_map_param):
     alphabet = set()
     for pattern_name, nfa_component in nfas_map_param.items():
         if not nfa_component or not nfa_component.start_state or not nfa_component.accept_state:
-            continue # Skip if NFA is invalid
+            continue
         overall_start.add_transition(EPSILON, nfa_component.start_state)
-        # Store original accept state of component NFA and its pattern name
         accept_map[nfa_component.accept_state] = pattern_name
-        if nfa_component.alphabet:
+        if nfa_component.alphabet: # Alphabeto do NFA componente já deve ter chars reais
             alphabet.update(nfa_component.alphabet)
     return overall_start, accept_map, alphabet

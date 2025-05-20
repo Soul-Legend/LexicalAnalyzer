@@ -40,7 +40,7 @@ TEST_CASES = [
     {
         "name": "Operadores Matemáticos Simples",
         "re_definitions": (
-            "NUM: [0-9]+([.][0-9]+)?\n"
+            "NUM: [0-9]+(\.[0-9]+)?\n"
             "PLUS: [+]\n"
             "EQ: [=]\n"
             "MINUS: [-]\n"
