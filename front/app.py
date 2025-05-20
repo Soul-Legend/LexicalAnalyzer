@@ -12,7 +12,7 @@ from .callbacks import (load_re_from_file_for_current_mode_callback,
                         tokenize_source_callback)
 from .ui_utils import update_display_tab, clear_dfa_image
 from tests import TEST_CASES 
-from lexer_core import SymbolTable # Importar SymbolTable
+from lexer_core import SymbolTable
 
 
 class LexerGeneratorApp(ctk.CTk):
@@ -50,7 +50,7 @@ class LexerGeneratorApp(ctk.CTk):
         self.active_construction_method = "thompson" 
         
         self.images_output_dir = "imagens"
-        self.symbol_table_instance = SymbolTable() # Instância da TS
+        self.symbol_table_instance = SymbolTable()
 
         self.manual_mode_widgets = {}
         self.auto_test_mode_widgets = {}
@@ -90,28 +90,30 @@ class LexerGeneratorApp(ctk.CTk):
         if widgets:
             is_thompson = (self.active_construction_method == "thompson")
             
-            combine_btn = widgets.get("combine_nfas_button")
+            combine_btn = widgets.get("combine_nfas_button") # Botão B
             if combine_btn:
                 if is_thompson:
-                    combine_btn.configure(text="B. Unir NFAs (Thompson)", command=self.combine_all_nfas, state="disabled")
+                    combine_btn.configure(text="B. Unir NFAs & Determinar", command=self.combine_all_nfas, state="disabled")
                 else: 
-                    combine_btn.configure(text="B. (União em Etapa A para Followpos)", command=lambda: None, state="disabled")
+                    combine_btn.configure(text="B. (AFD Direto da Etapa A)", command=lambda: None, state="disabled")
 
-            process_btn_text = "A. REs ➔ Autômatos Ind. / AFD Direto"
+            process_btn_text = "A. Processar ERs" # Botão A
             if widgets.get("process_re_button"):
                  widgets["process_re_button"].configure(text=process_btn_text)
             
-            generate_dfa_btn = widgets.get("generate_dfa_button")
+            generate_dfa_btn = widgets.get("generate_dfa_button") # Botão C
             if generate_dfa_btn:
-                generate_dfa_btn.configure(text="C. Determinar/Minimizar ➔ AFD Final")
+                generate_dfa_btn.configure(text="C. Minimizar AFD")
+
 
         if frame_name == "AutoTestMode":
             self.active_construction_method = "thompson"
             widgets = self.get_current_mode_widgets()
             if widgets and widgets.get("process_re_button"):
-                 widgets["process_re_button"].configure(text="A. REs ➔ NFAs (Thompson)")
+                 widgets["process_re_button"].configure(text="A. Processar ERs")
             if widgets and widgets.get("combine_nfas_button"):
-                widgets["combine_nfas_button"].configure(text="B. Unir NFAs (Thompson)", command=self.combine_all_nfas)
+                widgets["combine_nfas_button"].configure(text="B. Unir NFAs & Determinar", command=self.combine_all_nfas)
+
 
             if widgets and widgets.get("re_input_textbox") and \
                not widgets["re_input_textbox"].get("1.0", "end-1c").strip() and TEST_CASES:
@@ -142,20 +144,20 @@ class LexerGeneratorApp(ctk.CTk):
         source_textbox.delete("1.0", "end")
         source_textbox.insert("1.0", content)
         source_textbox.configure(state="disabled")
-        if self.dfa: update_display_tab(widgets, "Tokens Gerados", f"({self.current_test_name}: Texto fonte alterado, reanalisar)")
+        if self.dfa: update_display_tab(widgets, "Saída do Analisador Léxico (Tokens)", f"({self.current_test_name}: Texto fonte alterado, reanalisar)")
 
     def reset_app_state(self):
         self.definitions.clear(); self.pattern_order.clear(); self.reserved_words_defs.clear(); self.patterns_to_ignore.clear()
         self.individual_nfas.clear(); self.combined_nfa_start_obj = None; self.combined_nfa_accept_map = None; self.combined_nfa_alphabet = None
         self.augmented_syntax_tree_followpos = None; self.followpos_table_followpos = None;
         self.unminimized_dfa = None; self.dfa = None; self.lexer = None
-        self.symbol_table_instance.clear() # Limpa a TS principal
+        self.symbol_table_instance.clear()
         
         widgets = self.get_current_mode_widgets()
         if not widgets: return
 
         for tab_name_key in widgets.get("textboxes_map", {}): 
-            if tab_name_key == "Tabela de Símbolos":
+            if tab_name_key == "Tabela de Símbolos (Definições & Dinâmica)":
                 update_display_tab(widgets, tab_name_key, "Tabela de Símbolos (Definições Estáticas):\n(Aguardando processamento de REs)")
             else:
                 update_display_tab(widgets, tab_name_key, "")
@@ -190,10 +192,10 @@ class LexerGeneratorApp(ctk.CTk):
         else:
             ts_builder.append("  (Nenhum)")
             
-        update_display_tab(widgets, "Tabela de Símbolos", "\n".join(ts_builder))
+        update_display_tab(widgets, "Tabela de Símbolos (Definições & Dinâmica)", "\n".join(ts_builder))
         if widgets.get("display_tab_view"):
             try:
-                widgets["display_tab_view"].set("Tabela de Símbolos")
+                widgets["display_tab_view"].set("Tabela de Símbolos (Definições & Dinâmica)")
             except Exception:
                 pass
 

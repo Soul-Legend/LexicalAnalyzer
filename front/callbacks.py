@@ -5,7 +5,7 @@ import customtkinter as ctk
 
 from automata import (NFA, DFA, NFAState, postfix_to_nfa, _finalize_nfa_properties,
                       combine_nfas, construct_unminimized_dfa_from_nfa, _minimize_dfa)
-from lexer_core import Lexer, parse_re_file_data, SymbolTable # SymbolTable importado
+from lexer_core import Lexer, parse_re_file_data, SymbolTable
 from regex_utils import infix_to_postfix
 from syntax_tree_direct_dfa import regex_to_direct_dfa, PositionNode
 from graph_drawer import draw_dfa_to_file
@@ -41,19 +41,8 @@ def process_regular_expressions_callback(app_instance):
     re_content = widgets["re_input_textbox"].get("1.0", "end-1c").strip()
     if not re_content: messagebox.showerror("Entrada Vazia", "Nenhuma definição regular fornecida."); return
     
-    app_instance.reset_app_state() 
+    app_instance.reset_app_state()
     
-    is_thompson_method = (app_instance.active_construction_method == "thompson")
-    btn_text_A = "A. REs ➔ Autômatos Ind. / AFD Direto"
-    widgets["process_re_button"].configure(text=btn_text_A, state="normal")
-
-    combine_btn = widgets.get("combine_nfas_button")
-    if combine_btn:
-        if is_thompson_method:
-            combine_btn.configure(text="B. Unir NFAs (Thompson)", command=app_instance.combine_all_nfas, state="disabled")
-        else: 
-            combine_btn.configure(text="B. (União em Etapa A para Followpos)", command=lambda: None, state="disabled")
-
     try:
         NFA.reset_state_ids()
         PositionNode.reset_id_counter()
@@ -61,7 +50,7 @@ def process_regular_expressions_callback(app_instance):
         DFA._state_map = {}  
 
         app_instance.definitions, app_instance.pattern_order, app_instance.reserved_words_defs, app_instance.patterns_to_ignore = parse_re_file_data(re_content)
-        app_instance.display_definitions_and_reserved_words() # Mudou de display_symbol_table
+        app_instance.display_definitions_and_reserved_words()
         
         construction_details_builder = [f"Processando Definições ({app_instance.current_test_name}):\n"]
         if app_instance.patterns_to_ignore: construction_details_builder.append(f"(Padrões ignorados: {', '.join(sorted(list(app_instance.patterns_to_ignore)))})\n")
@@ -77,10 +66,9 @@ def process_regular_expressions_callback(app_instance):
                 construction_details_builder.append(f"Definição: {name}: {regex_str}\n")
                 try:
                     postfix_expr_tokens = infix_to_postfix(regex_str)
-                    # Para exibição, junte os tokens, mas passe a lista para postfix_to_nfa
                     postfix_expr_str_display = "".join(postfix_expr_tokens)
                     construction_details_builder.append(f"  Pós-fixada: {postfix_expr_str_display if postfix_expr_str_display else '(VAZIA)'}\n")
-                    nfa = postfix_to_nfa(postfix_expr_tokens) # Passa a lista de tokens
+                    nfa = postfix_to_nfa(postfix_expr_tokens)
                     if nfa: 
                         app_instance.individual_nfas[name] = nfa
                         construction_details_builder.append(get_nfa_details_str(nfa, f"NFA para '{name}'") + "\n\n")
@@ -93,36 +81,42 @@ def process_regular_expressions_callback(app_instance):
         elif app_instance.active_construction_method == "tree_direct_dfa":
             if not app_instance.pattern_order:
                 messagebox.showerror("Erro", "Nenhuma definição de padrão encontrada para o modo Followpos.")
+                update_display_tab(widgets, "ER ➔ NFA Ind. / Árvore+Followpos", "Nenhuma definição de RE.")
                 return
-
-            first_re_name = app_instance.pattern_order[0]
-            first_re_str = app_instance.definitions[first_re_name]
-            construction_details_builder.append(f"Detalhando construção para a primeira RE (Followpos): {first_re_name}: {first_re_str}\n")
             
-            direct_dfa_example, aug_tree_example, pos_map_example = regex_to_direct_dfa(first_re_str, first_re_name)
-            if direct_dfa_example and aug_tree_example and pos_map_example:
-                app_instance.augmented_syntax_tree_followpos = aug_tree_example
-                app_instance.followpos_table_followpos = pos_map_example
-                construction_details_builder.append(f"  Árvore Aumentada para '{first_re_name}':\n{aug_tree_example}\n")
+            combined_re_parts = []
+            
+            name_for_followpos_dfa = app_instance.pattern_order[0]
+            regex_for_followpos_dfa = app_instance.definitions[name_for_followpos_dfa]
+            construction_details_builder.append(f"Construindo AFD Direto (Followpos) para: {name_for_followpos_dfa}: {regex_for_followpos_dfa}\n(Para um lexer completo, as ERs seriam unidas antes.)\n")
+
+            direct_dfa, aug_tree, pos_map = regex_to_direct_dfa(regex_for_followpos_dfa, name_for_followpos_dfa)
+            
+            if direct_dfa and aug_tree and pos_map:
+                app_instance.unminimized_dfa = direct_dfa # Este é o nosso AFD direto
+                app_instance.augmented_syntax_tree_followpos = aug_tree
+                app_instance.followpos_table_followpos = pos_map
+                
+                construction_details_builder.append(f"  Árvore Aumentada para '{name_for_followpos_dfa}':\n{aug_tree}\n")
                 fp_details = ["  Tabela Followpos:"]
-                for pid_sorted in sorted(pos_map_example.keys()):
-                    pnode = pos_map_example[pid_sorted]
+                for pid_sorted in sorted(pos_map.keys()):
+                    pnode = pos_map[pid_sorted]
                     fp_obj_ids_sorted = sorted([fp_obj.id for fp_obj in pnode.followpos])
                     fp_details.append(f"    {pnode}: {{ {', '.join(map(str,fp_obj_ids_sorted))} }}")
                 construction_details_builder.append("\n".join(fp_details) + "\n")
-                update_display_tab(widgets, "Autômato Intermediário / União", get_dfa_table_str(direct_dfa_example, f"AFD Direto para '{first_re_name}' (Exemplo):"))
-                if direct_dfa_example.states:
-                    app_instance.unminimized_dfa = direct_dfa_example
-                    process_successful = True
+                
+                update_display_tab(widgets, "NFA Combinado (União ε) / AFD Direto (Não-Minim.)", 
+                                   get_dfa_table_str(direct_dfa, f"AFD Direto (Não-Minimizado) para '{name_for_followpos_dfa}'"))
+                process_successful = True
             else:
-                construction_details_builder.append(f"  Falha ao gerar AFD direto para '{first_re_name}'.\n")
+                construction_details_builder.append(f"  Falha ao gerar AFD direto para '{name_for_followpos_dfa}'.\n")
             
-            if process_successful and widgets.get("generate_dfa_button"):
+            if process_successful and widgets.get("generate_dfa_button"): # Habilita para minimizar
                 widgets["generate_dfa_button"].configure(state="normal")
         
 
-        update_display_tab(widgets, "Construção Detalhada", "".join(construction_details_builder))
-        if widgets.get("display_tab_view"): widgets["display_tab_view"].set("Construção Detalhada")
+        update_display_tab(widgets, "ER ➔ NFA Ind. / Árvore+Followpos", "".join(construction_details_builder))
+        if widgets.get("display_tab_view"): widgets["display_tab_view"].set("ER ➔ NFA Ind. / Árvore+Followpos")
         
         if not process_successful:
              messagebox.showwarning("Processamento Parcial", f"({app_instance.current_test_name}): Algumas ou todas as REs falharam.")
@@ -131,53 +125,9 @@ def process_regular_expressions_callback(app_instance):
 
     except Exception as e:
         messagebox.showerror("Erro na Etapa A", f"({app_instance.current_test_name}): {type(e).__name__}: {str(e)}")
-        update_display_tab(widgets, "Construção Detalhada", f"Erro: {str(e)}")
+        update_display_tab(widgets, "ER ➔ NFA Ind. / Árvore+Followpos", f"Erro: {str(e)}")
 
-def tokenize_source_callback(app_instance):
-    widgets = app_instance.get_current_mode_widgets()
-    if not widgets: return
-    if not app_instance.lexer: 
-        messagebox.showerror("Lexer Indisponível", "Analisador Léxico não gerado. Execute todas as etapas de construção primeiro."); return
-    
-    source_code = widgets["source_code_input_textbox"].get("1.0", "end-1c")
-    if not source_code: 
-        update_display_tab(widgets, "Tokens Gerados", "(Nenhum texto fonte)"); 
-        update_display_tab(widgets, "Tabela de Símbolos", "Tabela de Símbolos (gerada pela análise léxica):\n(Nenhum texto fonte para analisar)")
-        return
-    try:
-        # O lexer agora retorna (lista_de_tokens, instancia_da_tabela_de_simbolos)
-        tokens_data_list, populated_symbol_table = app_instance.lexer.tokenize(source_code)
-        
-        output_lines = [f"Tokens Gerados ({app_instance.current_test_name} - com AFD Minimizado):\n"]
-        if not tokens_data_list: 
-            output_lines.append("(Nenhum token reconhecido)")
-        else:
-
-            for lexema, token_type, attribute in tokens_data_list:
-                if token_type == "ERRO!":
-                    output_lines.append(f"<{lexema}, {token_type}>")
-                elif token_type == "ID": # Supondo que "ID" seja o tipo para identificadores
-                    output_lines.append(f"<{token_type}, {attribute}>  (Lexema: '{lexema}')")
-                elif isinstance(attribute, (int, float)):
-                     output_lines.append(f"<{token_type}, {attribute}> (Lexema: '{lexema}')")
-                else: # Para operadores, palavras-chave, etc. onde o atributo pode ser o lexema ou None
-                    output_lines.append(f"<{lexema}, {token_type}>")
-
-        update_display_tab(widgets, "Tokens Gerados", "\n".join(output_lines))
-        
-        # Atualiza a exibição da Tabela de Símbolos dinâmica
-        ts_dynamic_str = "Tabela de Símbolos (Dinâmica - Após Análise Léxica):\n"
-        ts_dynamic_str += str(populated_symbol_table) # Usa o __str__ da SymbolTable
-        update_display_tab(widgets, "Tabela de Símbolos", ts_dynamic_str)
-
-
-        if widgets.get("display_tab_view"): widgets["display_tab_view"].set("Tokens Gerados")
-    except Exception as e:
-        messagebox.showerror("Erro Análise Léxica", f"({app_instance.current_test_name}): {type(e).__name__}: {str(e)}")
-        update_display_tab(widgets, "Tokens Gerados", f"Erro: {str(e)}")
-        update_display_tab(widgets, "Tabela de Símbolos", "Tabela de Símbolos (Dinâmica - Após Análise Léxica):\n(Erro durante a análise)")
-
-def combine_all_nfas_callback(app_instance):
+def combine_all_nfas_callback(app_instance): # Etapa B do Thompson
     widgets = app_instance.get_current_mode_widgets()
     if not widgets or app_instance.active_construction_method != "thompson": return
     if not app_instance.individual_nfas: messagebox.showerror("Sem NFAs", "Nenhum NFA individual (Thompson) para combinar."); return
@@ -191,27 +141,27 @@ def combine_all_nfas_callback(app_instance):
 
         app_instance.combined_nfa_start_obj, app_instance.combined_nfa_accept_map, app_instance.combined_nfa_alphabet = combine_nfas(nfas_for_combination)
         if not app_instance.combined_nfa_start_obj:
-            messagebox.showerror("Erro Combinação", "Falha ao criar NFA combinado."); return
+            messagebox.showerror("Erro União NFA", "Falha ao criar NFA combinado."); return
         
         combined_nfa_shell = NFA(app_instance.combined_nfa_start_obj, None)
-        output_str = get_nfa_details_str(combined_nfa_shell, "NFA Combinado Global (Thompson)", combined_accept_map=app_instance.combined_nfa_accept_map)
+        display_str_builder = [get_nfa_details_str(combined_nfa_shell, "NFA Combinado Global (Após União ε)", combined_accept_map=app_instance.combined_nfa_accept_map)]
         
         app_instance.unminimized_dfa = construct_unminimized_dfa_from_nfa(
             app_instance.combined_nfa_start_obj, app_instance.combined_nfa_accept_map,
             app_instance.combined_nfa_alphabet, app_instance.pattern_order
         )
-        output_str += "\n\n====================\n\n"
-        output_str += get_dfa_table_str(app_instance.unminimized_dfa, title_prefix="AFD (de NFA Combinado) Não Minimizado (Etapa C - Determinização): ")
+        display_str_builder.append("\n\n====================\n\n")
+        display_str_builder.append(get_dfa_table_str(app_instance.unminimized_dfa, title_prefix="AFD Não Minimizado (Após Determinização): "))
 
-        update_display_tab(widgets, "Autômato Intermediário / União", output_str)
-        if widgets.get("display_tab_view"): widgets["display_tab_view"].set("Autômato Intermediário / União")
-        if widgets.get("generate_dfa_button"): widgets["generate_dfa_button"].configure(state="normal")
-        messagebox.showinfo("Sucesso (Etapa B e Início C - Thompson)", "NFAs combinados e AFD não minimizado gerado.")
+        update_display_tab(widgets, "NFA Combinado (União ε) / AFD Direto (Não-Minim.)", "\n".join(display_str_builder))
+        if widgets.get("display_tab_view"): widgets["display_tab_view"].set("NFA Combinado (União ε) / AFD Direto (Não-Minim.)")
+        if widgets.get("generate_dfa_button"): widgets["generate_dfa_button"].configure(state="normal") # Habilita Minimização
+        messagebox.showinfo("Sucesso (Etapa B - Thompson)", "NFAs combinados e AFD não minimizado gerado.")
     except Exception as e:
-        messagebox.showerror("Erro Etapa B/C - Thompson", f"{type(e).__name__}: {str(e)}")
-        update_display_tab(widgets, "Autômato Intermediário / União", f"Erro: {str(e)}")
+        messagebox.showerror("Erro Etapa B - Thompson", f"{type(e).__name__}: {str(e)}")
+        update_display_tab(widgets, "NFA Combinado (União ε) / AFD Direto (Não-Minim.)", f"Erro: {str(e)}")
 
-def generate_final_dfa_and_minimize_callback(app_instance):
+def generate_final_dfa_and_minimize_callback(app_instance): # Etapa C
     widgets = app_instance.get_current_mode_widgets()
     if not widgets: return
 
@@ -220,10 +170,7 @@ def generate_final_dfa_and_minimize_callback(app_instance):
 
     try:
         if not app_instance.unminimized_dfa:
-            if app_instance.active_construction_method == "thompson":
-                messagebox.showerror("Processo Incompleto", "Execute a Etapa B (Unir NFAs) primeiro para o modo Thompson.")
-            elif app_instance.active_construction_method == "tree_direct_dfa":
-                 messagebox.showerror("Processo Incompleto", "Execute a Etapa A (Processar REs) primeiro para o modo Followpos para gerar o AFD direto.")
+            messagebox.showerror("Processo Incompleto", "O AFD não minimizado (da Etapa B ou A-Followpos) não foi gerado.")
             return
 
         dfa_tables_display_builder.append(get_dfa_table_str(app_instance.unminimized_dfa, title_prefix="AFD Não Minimizado (Entrada para Minimização): "))
@@ -231,10 +178,9 @@ def generate_final_dfa_and_minimize_callback(app_instance):
         app_instance.dfa = _minimize_dfa(app_instance.unminimized_dfa)
         dfa_tables_display_builder.append(get_dfa_table_str(app_instance.dfa, title_prefix="AFD Minimizado (Final): "))
         
-        update_display_tab(widgets, "AFD (Não Minimizado e Minimizado)", "\n\n====================\n\n".join(dfa_tables_display_builder))
-        if widgets.get("display_tab_view"): widgets["display_tab_view"].set("AFD (Não Minimizado e Minimizado)")
+        update_display_tab(widgets, "AFD Minimizado (Final)", "\n\n====================\n\n".join(dfa_tables_display_builder))
+        if widgets.get("display_tab_view"): widgets["display_tab_view"].set("AFD Minimizado (Final)")
         
-        # Passa a instância de SymbolTable para o Lexer (ou cria uma nova)
         app_instance.lexer = Lexer(app_instance.dfa, app_instance.reserved_words_defs, app_instance.patterns_to_ignore, app_instance.symbol_table_instance)
 
         if widgets.get("tokenize_button"): widgets["tokenize_button"].configure(state="normal")
@@ -244,7 +190,7 @@ def generate_final_dfa_and_minimize_callback(app_instance):
 
     except Exception as e:
         messagebox.showerror("Erro Etapa C - Minimização", f"({app_instance.current_test_name}): {type(e).__name__}: {str(e)}")
-        update_display_tab(widgets, "AFD (Não Minimizado e Minimizado)", f"Erro: {str(e)}")
+        update_display_tab(widgets, "AFD Minimizado (Final)", f"Erro: {str(e)}")
         for btn_key in ["tokenize_button", "save_dfa_button", "draw_dfa_button"]:
             if widgets.get(btn_key): widgets[btn_key].configure(state="disabled")
 
@@ -273,7 +219,7 @@ def draw_current_minimized_dfa_callback(app_instance):
             if widgets.get("display_tab_view"):
                  display_tab_view_widget = widgets["display_tab_view"]
                  try:
-                    tab_widget_for_drawing = display_tab_view_widget.winfo_children()[display_tab_view_widget.index("Desenho AFD")]
+                    tab_widget_for_drawing = display_tab_view_widget.winfo_children()[display_tab_view_widget.index("Desenho AFD Minimizado")]
                  except Exception: 
                     tab_widget_for_drawing = display_tab_view_widget 
 
@@ -309,7 +255,7 @@ def draw_current_minimized_dfa_callback(app_instance):
             
             if widgets.get("display_tab_view"):
                 try:
-                    widgets["display_tab_view"].set("Desenho AFD")
+                    widgets["display_tab_view"].set("Desenho AFD Minimizado")
                 except Exception: 
                     pass 
             messagebox.showinfo("Desenho AFD", f"Desenho do AFD exibido e salvo em:\n{image_path}")
@@ -343,3 +289,45 @@ def save_dfa_to_file_callback(app_instance):
 
             messagebox.showinfo("Sucesso", "Tabela AFD Minimizada (Anexo II) e versões legíveis salvas.")
         except Exception as e: messagebox.showerror("Erro Salvar AFD", str(e))
+
+def tokenize_source_callback(app_instance):
+    widgets = app_instance.get_current_mode_widgets()
+    if not widgets: return
+    if not app_instance.lexer: 
+        messagebox.showerror("Lexer Indisponível", "Analisador Léxico não gerado. Execute todas as etapas de construção primeiro."); return
+    
+    source_code = widgets["source_code_input_textbox"].get("1.0", "end-1c")
+    if not source_code: 
+        update_display_tab(widgets, "Saída do Analisador Léxico (Tokens)", "(Nenhum texto fonte)"); 
+        update_display_tab(widgets, "Tabela de Símbolos (Definições & Dinâmica)", "Tabela de Símbolos (Dinâmica):\n(Nenhum texto fonte para analisar)")
+        return
+    try:
+        tokens_data_list, populated_symbol_table = app_instance.lexer.tokenize(source_code)
+        
+        output_lines = [f"Tokens Gerados ({app_instance.current_test_name} - com AFD Minimizado):\n"]
+        if not tokens_data_list: 
+            output_lines.append("(Nenhum token reconhecido)")
+        else:
+            for lexema, token_type, attribute in tokens_data_list:
+                if token_type == "ERRO!":
+                    output_lines.append(f"<{lexema}, {token_type}>")
+                elif token_type == "ID" and isinstance(attribute, int): 
+                    output_lines.append(f"<{token_type}, {attribute}>  (Lexema: '{lexema}')")
+                elif isinstance(attribute, (int, float)):
+                     output_lines.append(f"<{lexema}, {token_type}> (Valor: {attribute})") # Para NUM
+                else: 
+                    output_lines.append(f"<{lexema}, {token_type}>")
+
+        update_display_tab(widgets, "Saída do Analisador Léxico (Tokens)", "\n".join(output_lines))
+        
+        ts_static_part = widgets["textboxes_map"]["Tabela de Símbolos (Definições & Dinâmica)"].get("1.0", "end-1c").split("\n\nTabela de Símbolos (Dinâmica")[0]
+        ts_dynamic_str = "\n\nTabela de Símbolos (Dinâmica - Após Análise Léxica):\n"
+        ts_dynamic_str += str(populated_symbol_table)
+        update_display_tab(widgets, "Tabela de Símbolos (Definições & Dinâmica)", ts_static_part + ts_dynamic_str)
+
+
+        if widgets.get("display_tab_view"): widgets["display_tab_view"].set("Saída do Analisador Léxico (Tokens)")
+    except Exception as e:
+        messagebox.showerror("Erro Análise Léxica", f"({app_instance.current_test_name}): {type(e).__name__}: {str(e)}")
+        update_display_tab(widgets, "Saída do Analisador Léxico (Tokens)", f"Erro: {str(e)}")
+        update_display_tab(widgets, "Tabela de Símbolos (Definições & Dinâmica)", "Tabela de Símbolos (Dinâmica - Após Análise Léxica):\n(Erro durante a análise)")
