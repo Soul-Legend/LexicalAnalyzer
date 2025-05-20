@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from tkinter import filedialog, messagebox # Mantido para _set_re_definitions_for_current_mode (messagebox)
+from tkinter import filedialog, messagebox 
 
 from .frames import create_start_screen_frame, create_manual_mode_frame_widgets, create_auto_test_mode_frame_widgets
 from .callbacks import (load_re_from_file_for_current_mode_callback, 
@@ -11,7 +11,9 @@ from .callbacks import (load_re_from_file_for_current_mode_callback,
                         save_dfa_to_file_callback, 
                         tokenize_source_callback)
 from .ui_utils import update_display_tab, clear_dfa_image
-from tests import TEST_CASES # Para show_frame e load_test_data
+from tests import TEST_CASES 
+from lexer_core import SymbolTable # Importar SymbolTable
+
 
 class LexerGeneratorApp(ctk.CTk):
     def __init__(self):
@@ -48,6 +50,7 @@ class LexerGeneratorApp(ctk.CTk):
         self.active_construction_method = "thompson" 
         
         self.images_output_dir = "imagens"
+        self.symbol_table_instance = SymbolTable() # Instância da TS
 
         self.manual_mode_widgets = {}
         self.auto_test_mode_widgets = {}
@@ -146,12 +149,16 @@ class LexerGeneratorApp(ctk.CTk):
         self.individual_nfas.clear(); self.combined_nfa_start_obj = None; self.combined_nfa_accept_map = None; self.combined_nfa_alphabet = None
         self.augmented_syntax_tree_followpos = None; self.followpos_table_followpos = None;
         self.unminimized_dfa = None; self.dfa = None; self.lexer = None
+        self.symbol_table_instance.clear() # Limpa a TS principal
         
         widgets = self.get_current_mode_widgets()
         if not widgets: return
 
         for tab_name_key in widgets.get("textboxes_map", {}): 
-            update_display_tab(widgets, tab_name_key, "")
+            if tab_name_key == "Tabela de Símbolos":
+                update_display_tab(widgets, tab_name_key, "Tabela de Símbolos (Definições Estáticas):\n(Aguardando processamento de REs)")
+            else:
+                update_display_tab(widgets, tab_name_key, "")
         
         clear_dfa_image(widgets)
         
@@ -160,21 +167,21 @@ class LexerGeneratorApp(ctk.CTk):
         for btn_key in ["combine_nfas_button", "generate_dfa_button", "draw_dfa_button", "save_dfa_button", "tokenize_button"]:
             if widgets.get(btn_key): widgets[btn_key].configure(state="disabled")
     
-    def display_symbol_table(self):
+    def display_definitions_and_reserved_words(self):
         widgets = self.get_current_mode_widgets()
         if not widgets: return
 
-        ts_builder = ["Tabela de Símbolos (Padrões e Palavras Reservadas):\n"]
+        ts_builder = ["Definições de Padrões e Palavras Reservadas (Estático):\n"]
         ts_builder.append("Padrões de Token Definidos (Ordem de Prioridade):")
         for i, pattern_name in enumerate(self.pattern_order):
             ts_builder.append(f"  {i+1}. {pattern_name}: {self.definitions.get(pattern_name, 'ER não encontrada')}")
         
-        ts_builder.append("\nPalavras Reservadas (Lexema -> Tipo de Token):")
+        ts_builder.append("\nPalavras Reservadas Identificadas (Lexema -> Tipo de Token):")
         if self.reserved_words_defs:
             for lexeme, token_type in sorted(self.reserved_words_defs.items()):
                 ts_builder.append(f"  '{lexeme}' -> {token_type}")
         else:
-            ts_builder.append("  (Nenhuma palavra reservada definida)")
+            ts_builder.append("  (Nenhuma palavra reservada definida/identificada)")
 
         ts_builder.append("\nPadrões a Ignorar:")
         if self.patterns_to_ignore:
@@ -190,7 +197,6 @@ class LexerGeneratorApp(ctk.CTk):
             except Exception:
                 pass
 
-    # Delegar callbacks para o módulo callbacks.py
     def load_re_from_file_for_current_mode(self): load_re_from_file_for_current_mode_callback(self)
     def load_test_data_for_auto_mode(self, test_case, show_message=True): load_test_data_for_auto_mode_callback(self, test_case, show_message)
     def process_regular_expressions(self): process_regular_expressions_callback(self)

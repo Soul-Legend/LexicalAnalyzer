@@ -1,16 +1,16 @@
 from tkinter import filedialog, messagebox
 import os
 from PIL import Image
-import customtkinter as ctk # Para CTkImage
+import customtkinter as ctk 
 
 from automata import (NFA, DFA, NFAState, postfix_to_nfa, _finalize_nfa_properties,
                       combine_nfas, construct_unminimized_dfa_from_nfa, _minimize_dfa)
-from lexer_core import Lexer, parse_re_file_data
+from lexer_core import Lexer, parse_re_file_data, SymbolTable # SymbolTable importado
 from regex_utils import infix_to_postfix
 from syntax_tree_direct_dfa import regex_to_direct_dfa, PositionNode
 from graph_drawer import draw_dfa_to_file
 from ui_formatters import get_nfa_details_str, get_dfa_table_str, get_dfa_anexo_ii_format
-from .ui_utils import update_display_tab, clear_dfa_image # Referência local
+from .ui_utils import update_display_tab, clear_dfa_image
 
 
 def load_re_from_file_for_current_mode_callback(app_instance):
@@ -61,7 +61,7 @@ def process_regular_expressions_callback(app_instance):
         DFA._state_map = {}  
 
         app_instance.definitions, app_instance.pattern_order, app_instance.reserved_words_defs, app_instance.patterns_to_ignore = parse_re_file_data(re_content)
-        app_instance.display_symbol_table()
+        app_instance.display_definitions_and_reserved_words() # Mudou de display_symbol_table
         
         construction_details_builder = [f"Processando Definições ({app_instance.current_test_name}):\n"]
         if app_instance.patterns_to_ignore: construction_details_builder.append(f"(Padrões ignorados: {', '.join(sorted(list(app_instance.patterns_to_ignore)))})\n")
@@ -76,9 +76,11 @@ def process_regular_expressions_callback(app_instance):
                 if not regex_str: continue
                 construction_details_builder.append(f"Definição: {name}: {regex_str}\n")
                 try:
-                    postfix_expr = infix_to_postfix(regex_str)
-                    construction_details_builder.append(f"  Pós-fixada: {postfix_expr if postfix_expr else '(VAZIA)'}\n")
-                    nfa = postfix_to_nfa(postfix_expr)
+                    postfix_expr_tokens = infix_to_postfix(regex_str)
+                    # Para exibição, junte os tokens, mas passe a lista para postfix_to_nfa
+                    postfix_expr_str_display = "".join(postfix_expr_tokens)
+                    construction_details_builder.append(f"  Pós-fixada: {postfix_expr_str_display if postfix_expr_str_display else '(VAZIA)'}\n")
+                    nfa = postfix_to_nfa(postfix_expr_tokens) # Passa a lista de tokens
                     if nfa: 
                         app_instance.individual_nfas[name] = nfa
                         construction_details_builder.append(get_nfa_details_str(nfa, f"NFA para '{name}'") + "\n\n")
@@ -130,6 +132,50 @@ def process_regular_expressions_callback(app_instance):
     except Exception as e:
         messagebox.showerror("Erro na Etapa A", f"({app_instance.current_test_name}): {type(e).__name__}: {str(e)}")
         update_display_tab(widgets, "Construção Detalhada", f"Erro: {str(e)}")
+
+def tokenize_source_callback(app_instance):
+    widgets = app_instance.get_current_mode_widgets()
+    if not widgets: return
+    if not app_instance.lexer: 
+        messagebox.showerror("Lexer Indisponível", "Analisador Léxico não gerado. Execute todas as etapas de construção primeiro."); return
+    
+    source_code = widgets["source_code_input_textbox"].get("1.0", "end-1c")
+    if not source_code: 
+        update_display_tab(widgets, "Tokens Gerados", "(Nenhum texto fonte)"); 
+        update_display_tab(widgets, "Tabela de Símbolos", "Tabela de Símbolos (gerada pela análise léxica):\n(Nenhum texto fonte para analisar)")
+        return
+    try:
+        # O lexer agora retorna (lista_de_tokens, instancia_da_tabela_de_simbolos)
+        tokens_data_list, populated_symbol_table = app_instance.lexer.tokenize(source_code)
+        
+        output_lines = [f"Tokens Gerados ({app_instance.current_test_name} - com AFD Minimizado):\n"]
+        if not tokens_data_list: 
+            output_lines.append("(Nenhum token reconhecido)")
+        else:
+
+            for lexema, token_type, attribute in tokens_data_list:
+                if token_type == "ERRO!":
+                    output_lines.append(f"<{lexema}, {token_type}>")
+                elif token_type == "ID": # Supondo que "ID" seja o tipo para identificadores
+                    output_lines.append(f"<{token_type}, {attribute}>  (Lexema: '{lexema}')")
+                elif isinstance(attribute, (int, float)):
+                     output_lines.append(f"<{token_type}, {attribute}> (Lexema: '{lexema}')")
+                else: # Para operadores, palavras-chave, etc. onde o atributo pode ser o lexema ou None
+                    output_lines.append(f"<{lexema}, {token_type}>")
+
+        update_display_tab(widgets, "Tokens Gerados", "\n".join(output_lines))
+        
+        # Atualiza a exibição da Tabela de Símbolos dinâmica
+        ts_dynamic_str = "Tabela de Símbolos (Dinâmica - Após Análise Léxica):\n"
+        ts_dynamic_str += str(populated_symbol_table) # Usa o __str__ da SymbolTable
+        update_display_tab(widgets, "Tabela de Símbolos", ts_dynamic_str)
+
+
+        if widgets.get("display_tab_view"): widgets["display_tab_view"].set("Tokens Gerados")
+    except Exception as e:
+        messagebox.showerror("Erro Análise Léxica", f"({app_instance.current_test_name}): {type(e).__name__}: {str(e)}")
+        update_display_tab(widgets, "Tokens Gerados", f"Erro: {str(e)}")
+        update_display_tab(widgets, "Tabela de Símbolos", "Tabela de Símbolos (Dinâmica - Após Análise Léxica):\n(Erro durante a análise)")
 
 def combine_all_nfas_callback(app_instance):
     widgets = app_instance.get_current_mode_widgets()
@@ -188,7 +234,9 @@ def generate_final_dfa_and_minimize_callback(app_instance):
         update_display_tab(widgets, "AFD (Não Minimizado e Minimizado)", "\n\n====================\n\n".join(dfa_tables_display_builder))
         if widgets.get("display_tab_view"): widgets["display_tab_view"].set("AFD (Não Minimizado e Minimizado)")
         
-        app_instance.lexer = Lexer(app_instance.dfa, app_instance.reserved_words_defs, app_instance.patterns_to_ignore)
+        # Passa a instância de SymbolTable para o Lexer (ou cria uma nova)
+        app_instance.lexer = Lexer(app_instance.dfa, app_instance.reserved_words_defs, app_instance.patterns_to_ignore, app_instance.symbol_table_instance)
+
         if widgets.get("tokenize_button"): widgets["tokenize_button"].configure(state="normal")
         if widgets.get("save_dfa_button"): widgets["save_dfa_button"].configure(state="normal")
         if widgets.get("draw_dfa_button"): widgets["draw_dfa_button"].configure(state="normal")
@@ -224,13 +272,10 @@ def draw_current_minimized_dfa_callback(app_instance):
             tab_widget_for_drawing = None
             if widgets.get("display_tab_view"):
                  display_tab_view_widget = widgets["display_tab_view"]
-                 # Encontrar a aba pelo nome pode ser instável se o nome mudar. Melhor usar o índice se soubermos.
-                 # Ou, iterar pelas abas para encontrar a que contém o dfa_image_label.
-                 # Por agora, vamos supor que a aba "Desenho AFD" é a quarta (índice 3).
                  try:
                     tab_widget_for_drawing = display_tab_view_widget.winfo_children()[display_tab_view_widget.index("Desenho AFD")]
-                 except Exception: # Se a aba não for encontrada ou nome for diferente
-                    tab_widget_for_drawing = display_tab_view_widget # Fallback para o tabview todo
+                 except Exception: 
+                    tab_widget_for_drawing = display_tab_view_widget 
 
             max_tab_width = tab_widget_for_drawing.winfo_width() if tab_widget_for_drawing and tab_widget_for_drawing.winfo_width() > 20 else 700 
             max_tab_height = tab_widget_for_drawing.winfo_height() if tab_widget_for_drawing and tab_widget_for_drawing.winfo_height() > 20 else 500
@@ -298,20 +343,3 @@ def save_dfa_to_file_callback(app_instance):
 
             messagebox.showinfo("Sucesso", "Tabela AFD Minimizada (Anexo II) e versões legíveis salvas.")
         except Exception as e: messagebox.showerror("Erro Salvar AFD", str(e))
-
-def tokenize_source_callback(app_instance):
-    widgets = app_instance.get_current_mode_widgets()
-    if not widgets: return
-    if not app_instance.lexer: messagebox.showerror("Lexer Indisponível", "Analisador Léxico não gerado."); return
-    source_code = widgets["source_code_input_textbox"].get("1.0", "end-1c")
-    if not source_code: update_display_tab(widgets, "Tokens Gerados", "(Nenhum texto fonte)"); return
-    try:
-        tokens = app_instance.lexer.tokenize(source_code)
-        output_lines = [f"Tokens Gerados ({app_instance.current_test_name} - com AFD Minimizado):\n"]
-        if not tokens: output_lines.append("(Nenhum token reconhecido)")
-        for lexeme, pattern in tokens: output_lines.append(f"<{lexeme}, {pattern if pattern != 'erro!' else 'ERRO!'}>")
-        update_display_tab(widgets, "Tokens Gerados", "\n".join(output_lines))
-        if widgets.get("display_tab_view"): widgets["display_tab_view"].set("Tokens Gerados")
-    except Exception as e:
-        messagebox.showerror("Erro Análise Léxica", f"({app_instance.current_test_name}): {type(e).__name__}: {str(e)}")
-        update_display_tab(widgets, "Tokens Gerados", f"Erro: {str(e)}")

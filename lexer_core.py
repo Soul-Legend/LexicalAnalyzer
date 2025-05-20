@@ -1,4 +1,39 @@
-# lexer_core.py
+class SymbolTable:
+    def __init__(self):
+        self.table = [] # Lista de dicionários (ou objetos) representando entradas
+        self.lexeme_to_index = {} # Mapeia nome do lexema para seu índice na self.table
+
+    def add_symbol(self, lexeme, token_type_base):
+        if lexeme not in self.lexeme_to_index:
+            index = len(self.table)
+            entry = {"lexeme": lexeme, "token_type_base": token_type_base}
+            # Futuramente: "data_type": None, "scope": None, "address": None etc.
+            self.table.append(entry)
+            self.lexeme_to_index[lexeme] = index
+            return index
+        return self.lexeme_to_index[lexeme]
+
+    def get_symbol_entry(self, index):
+        if 0 <= index < len(self.table):
+            return self.table[index]
+        return None
+    
+    def get_index(self, lexeme):
+        return self.lexeme_to_index.get(lexeme)
+
+    def clear(self):
+        self.table.clear()
+        self.lexeme_to_index.clear()
+
+    def __str__(self):
+        if not self.table:
+            return "Tabela de Símbolos vazia."
+        header = f"{'Índice':<7} | {'Lexema':<20} | {'Tipo Base':<10}\n" + "-"*45
+        rows = [header]
+        for i, entry in enumerate(self.table):
+            rows.append(f"{i:<7} | {entry['lexeme']:<20} | {entry['token_type_base']:<10}")
+        return "\n".join(rows)
+
 
 def parse_re_file_data(re_file_content):
     definitions = {}
@@ -40,19 +75,22 @@ def parse_re_file_data(re_file_content):
             patterns_to_ignore.add(name)
 
         if name.isupper() and regex.islower() and name.lower() == regex:
-            reserved_words_defs[regex] = name
+            reserved_words_defs[regex] = name # lexema_minusculo -> NOME_TOKEN_MAIUSCULO
             
     return definitions, pattern_order, reserved_words_defs, patterns_to_ignore
 
 
 class Lexer:
-    def __init__(self, dfa, reserved_words=None, patterns_to_ignore=None):
+    def __init__(self, dfa, reserved_words=None, patterns_to_ignore=None, symbol_table_instance=None):
         self.dfa = dfa
         self.reserved_words = reserved_words if reserved_words else {}
         self.patterns_to_ignore = patterns_to_ignore if patterns_to_ignore else set()
+        self.symbol_table = symbol_table_instance if symbol_table_instance else SymbolTable()
 
     def tokenize(self, source_code):
-        tokens = []
+        self.symbol_table.clear() # Limpa a TS para cada nova análise de código fonte
+        tokens_output_list = [] # Para <tipo, atributo>
+        
         pos = 0
         source_len = len(source_code)
 
@@ -62,37 +100,15 @@ class Lexer:
             
             last_match_end_pos = -1
             last_match_lexeme = ""
-            last_match_pattern_name = None
+            last_match_pattern_name = None # Este é o NOME DO PADRÃO (ex: "ID", "NUM", "PLUS")
 
             temp_read_pos = pos
             
-            # Verifica se o estado inicial já é um estado de aceitação (para linguagens que aceitam epsilon)
-            # Esta lógica é para o caso de um padrão poder corresponder à string vazia no início da análise
-            # ou entre tokens válidos.
-            if self.dfa.start_state_id is not None and self.dfa.start_state_id in self.dfa.accept_states:
-                 # Se o estado inicial é de aceitação, temos uma correspondência de comprimento zero.
-                 # Isso é relevante se a ER pode ser epsilon.
-                 # No entanto, um lexer geralmente avança consumindo caracteres.
-                 # Lidar com "tokens epsilon" no meio de uma string é complexo e geralmente não é feito.
-                 # Se uma ER como "a?" está no início e a string é "b", "a?" não consome 'a',
-                 # mas não gera um token epsilon antes de tentar 'b'.
-                 # Esta verificação aqui é mais para o caso de *toda* a string de entrada ser processada
-                 # e o estado final ser de aceitação, ou para ERs que *apenas* aceitam epsilon.
-                 # Para a tokenização progressiva, a lógica abaixo é mais relevante.
-                 pass
-
-
             while temp_read_pos < source_len:
                 char_to_read = source_code[temp_read_pos]
                 
-                # Se o caractere não estiver no alfabeto do DFA, ele não pode ser processado.
-                # Isso pode ser um erro léxico, a menos que seja um espaço em branco ignorado
-                # ou parte de um token mais longo que será tratado por `last_match_pattern_name`.
                 if char_to_read not in self.dfa.alphabet and (current_dfa_state, char_to_read) not in self.dfa.transitions:
-                    # Se já tínhamos uma correspondência válida, use-a.
-                    # Se não, este caractere não pode iniciar uma nova transição válida a partir do estado atual.
                     break 
-
 
                 if current_dfa_state in self.dfa.accept_states:
                     last_match_end_pos = temp_read_pos 
@@ -111,37 +127,37 @@ class Lexer:
                 last_match_pattern_name = self.dfa.accept_states[current_dfa_state]
             
             if last_match_pattern_name:
+                actual_token_type = last_match_pattern_name # Tipo base do token (ex: ID, IF, PLUS)
+                attribute = last_match_lexeme # Atributo padrão é o próprio lexema
+
+                # Lógica para %ignore
                 if last_match_pattern_name in self.patterns_to_ignore:
                     pos = last_match_end_pos
                     continue
 
-                final_lexeme = last_match_lexeme
-                final_pattern = last_match_pattern_name
+                # Verifica palavras reservadas
+                if last_match_lexeme.lower() in self.reserved_words:
+                    # Se for palavra reservada, o TIPO do token muda para o da palavra reservada
+                    actual_token_type = self.reserved_words[last_match_lexeme.lower()]
+                    attribute = None 
 
-                if final_lexeme.lower() in self.reserved_words:
-                    final_pattern = self.reserved_words[final_lexeme.lower()]
-                
-                tokens.append((final_lexeme, final_pattern))
+                if actual_token_type == "ID": # Ou uma lista configurável de tipos que vão para TS
+                    st_index = self.symbol_table.add_symbol(last_match_lexeme, "ID")
+                    attribute = st_index # Atributo para ID é o índice na TS
+                elif actual_token_type == "NUM": # Para números, o atributo pode ser o valor convertido
+                    try:
+                        attribute = float(last_match_lexeme) if '.' in last_match_lexeme else int(last_match_lexeme)
+                    except ValueError:
+                        attribute = last_match_lexeme 
+
+                tokens_output_list.append((last_match_lexeme, actual_token_type, attribute)) # (Lexema, TipoFinal, Atributo)
                 pos = last_match_end_pos
             
             else:
                 if start_pos_for_token < source_len:
-                    error_lexeme_end = start_pos_for_token + 1
-                    
-                    # Tenta consumir até o próximo espaço em branco ou fim da linha para o erro
-                    # Isso é apenas para dar um contexto melhor ao erro, não afeta o avanço.
-                    # O avanço real será de um caractere se nenhum token for encontrado.
-                    temp_error_context_end = error_lexeme_end
-                    while temp_error_context_end < source_len and not source_code[temp_error_context_end].isspace():
-                        temp_error_context_end +=1
-                    
-                    failing_lexeme_context = source_code[start_pos_for_token : temp_error_context_end]
-                    
-                    # O token de erro real é apenas o primeiro caractere não reconhecido
                     actual_failing_char = source_code[start_pos_for_token]
-
-                    tokens.append((actual_failing_char, "erro!")) # Reporta apenas o primeiro char como erro
-                    pos += 1 # Avança apenas um caractere
+                    tokens_output_list.append((actual_failing_char, "ERRO!", actual_failing_char))
+                    pos += 1 
                 else:
                     break
-        return tokens
+        return tokens_output_list, self.symbol_table # Retorna tokens e a TS populada
