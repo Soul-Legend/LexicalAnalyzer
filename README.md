@@ -75,11 +75,17 @@ Painel de Controles e Definições:
 Definições Regulares:
 
 Digite ou carregue de um arquivo (.txt, .re) as definições dos seus tokens. O formato é NOME_DO_TOKEN: ExpressaoRegular.
+
 Comentários: Linhas iniciadas com # são ignoradas.
+
 Ignorando Tokens: Adicione %ignore ao final da linha de uma definição para que os lexemas correspondentes sejam consumidos da entrada, mas não gerem um token na saída final (útil para espaços em branco, comentários da linguagem fonte).
+
 Caracteres Literais: Um caractere normal representa ele mesmo. Ex: a, b, 1, _.
+
 Concatenação: Sequência de caracteres ou sub-expressões. Ex: abc (casa "abc"). O sistema insere operadores de concatenação implícitos onde necessário.
+
 Alternativa (OU): O operador |. Ex: a|b (casa "a" OU "b").
+
 Classes de Caracteres: [...] define um conjunto de caracteres aceitáveis.
         [abc] : Casa "a" OU "b" OU "c".
         [a-z] : Casa qualquer letra minúscula de "a" até "z".
@@ -88,15 +94,17 @@ Classes de Caracteres: [...] define um conjunto de caracteres aceitáveis.
         [a-zA-Z0-9_] : Casa qualquer letra (maiúscula ou minúscula), dígito ou underscore.
         Literais Dentro de Classes: A maioria dos metacaracteres de ER (como *, +, ?, (, )) perdem seu significado especial dentro de [] e são tratados como literais. Ex: [+*-] casa o caractere +, ou -, ou *.
         Escape Dentro de Classes: Use \ para escapar caracteres que ainda têm significado especial dentro de [], como \ em si ([\\]), ] ([\\]]), ou - se não estiver definindo um range ([a\\-z]).
+        
 Agrupamento: Parênteses (...) agrupam sub-expressões para aplicar operadores ou definir precedência. Ex: (ab)+.
 Operadores de Repetição (Fechos):
     * (Fecho de Kleene): Zero ou mais ocorrências do item anterior. Ex: a* (casa "", "a", "aa", ...).
     + (Fecho Positivo): Uma ou mais ocorrências do item anterior. Ex: a+ (casa "a", "aa", ... mas não "").
     ? (Opcional): Zero ou uma ocorrência do item anterior. Ex: a? (casa "" ou "a").
+    
 Caracteres Especiais e Escapes:
     Para usar um metacaractere de ER (como ., *, +, ?, |, (, )) como um caractere literal fora de uma classe de caracteres, você deve escapá-lo com uma barra invertida \. Ex: \. para o caractere ponto literal, \* para o caractere asterisco literal.
 
-    O caractere & é reservado pelo sistema para representar a transição épsilon interna dos NFAs e não deve ser usado como um caractere literal nas suas ERs de entrada, a menos que você modifique config.py e toda a lógica associada. Se precisar do caractere '&' literal, use \&.
+   O caractere & é reservado pelo sistema para representar a transição épsilon interna dos NFAs e não deve ser usado como um caractere literal nas suas ERs de entrada, a menos que você modifique config.py e toda a lógica associada. Se precisar do caractere '&' literal, use \&.
 
 Exemplos de Definições Regulares:
 
