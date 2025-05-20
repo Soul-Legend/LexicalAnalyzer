@@ -1,13 +1,13 @@
+# lexer_core.py
 class SymbolTable:
     def __init__(self):
-        self.table = [] # Lista de dicionários (ou objetos) representando entradas
-        self.lexeme_to_index = {} # Mapeia nome do lexema para seu índice na self.table
+        self.table = [] 
+        self.lexeme_to_index = {} 
 
     def add_symbol(self, lexeme, token_type_base):
         if lexeme not in self.lexeme_to_index:
             index = len(self.table)
             entry = {"lexeme": lexeme, "token_type_base": token_type_base}
-            # Futuramente: "data_type": None, "scope": None, "address": None etc.
             self.table.append(entry)
             self.lexeme_to_index[lexeme] = index
             return index
@@ -75,7 +75,7 @@ def parse_re_file_data(re_file_content):
             patterns_to_ignore.add(name)
 
         if name.isupper() and regex.islower() and name.lower() == regex:
-            reserved_words_defs[regex] = name # lexema_minusculo -> NOME_TOKEN_MAIUSCULO
+            reserved_words_defs[regex] = name 
             
     return definitions, pattern_order, reserved_words_defs, patterns_to_ignore
 
@@ -88,8 +88,8 @@ class Lexer:
         self.symbol_table = symbol_table_instance if symbol_table_instance else SymbolTable()
 
     def tokenize(self, source_code):
-        self.symbol_table.clear() # Limpa a TS para cada nova análise de código fonte
-        tokens_output_list = [] # Para <tipo, atributo>
+        self.symbol_table.clear() 
+        tokens_output_list = [] 
         
         pos = 0
         source_len = len(source_code)
@@ -100,16 +100,15 @@ class Lexer:
             
             last_match_end_pos = -1
             last_match_lexeme = ""
-            last_match_pattern_name = None # Este é o NOME DO PADRÃO (ex: "ID", "NUM", "PLUS")
+            last_match_pattern_name = None
 
             temp_read_pos = pos
             
+            # Try to match as long as possible
             while temp_read_pos < source_len:
                 char_to_read = source_code[temp_read_pos]
                 
-                if char_to_read not in self.dfa.alphabet and (current_dfa_state, char_to_read) not in self.dfa.transitions:
-                    break 
-
+                # Check if current_dfa_state is an accept state BEFORE trying to transition
                 if current_dfa_state in self.dfa.accept_states:
                     last_match_end_pos = temp_read_pos 
                     last_match_lexeme = source_code[start_pos_for_token : temp_read_pos]
@@ -119,25 +118,27 @@ class Lexer:
                     current_dfa_state = self.dfa.transitions[(current_dfa_state, char_to_read)]
                     temp_read_pos += 1
                 else:
+                    # Cannot transition further with this char_to_read
                     break
             
-            if last_match_pattern_name:
-                actual_token_type = last_match_pattern_name
+            # After the loop, check if the final state reached is an accept state
+            if temp_read_pos > start_pos_for_token and current_dfa_state in self.dfa.accept_states:
+                # This match is potentially longer than previous one if loop broke on valid transition
+                last_match_end_pos = temp_read_pos
+                last_match_lexeme = source_code[start_pos_for_token : temp_read_pos]
+                last_match_pattern_name = self.dfa.accept_states[current_dfa_state]
+            
+            if last_match_pattern_name: # A valid token was found
+                actual_token_type = last_match_pattern_name 
                 attribute = last_match_lexeme
 
-                # Check for non-progress with empty match BEFORE other logic
                 if not last_match_lexeme and last_match_end_pos == start_pos_for_token:
-                    if start_pos_for_token < source_len: # Not at EOF
-                        # Matched an empty string, but current char was not consumed by it
-                        # and this empty match was the "longest".
-                        # Treat the current character as an error to ensure progress.
+                    if start_pos_for_token < source_len:
                         actual_failing_char = source_code[start_pos_for_token]
                         tokens_output_list.append((actual_failing_char, "ERRO!", actual_failing_char))
                         pos = start_pos_for_token + 1
-                        continue # Skip further processing of the empty token
-                    # If at EOF and matched empty, it's fine, pos will become source_len below.
+                        continue
                 
-                # Now, handle ignore, reserved words, etc. for the (potentially non-empty) match
                 if last_match_pattern_name in self.patterns_to_ignore:
                     pos = last_match_end_pos
                     continue
@@ -146,7 +147,7 @@ class Lexer:
                     actual_token_type = self.reserved_words[last_match_lexeme.lower()]
                     attribute = None 
 
-                if actual_token_type == "ID": 
+                if actual_token_type == "ID":
                     st_index = self.symbol_table.add_symbol(last_match_lexeme, "ID")
                     attribute = st_index 
                 elif actual_token_type == "NUM": 
@@ -156,13 +157,13 @@ class Lexer:
                         attribute = last_match_lexeme 
 
                 tokens_output_list.append((last_match_lexeme, actual_token_type, attribute))
-                pos = last_match_end_pos
+                pos = last_match_end_pos 
             
-            else: # No match found (last_match_pattern_name is None)
+            else: # No token could be formed starting at start_pos_for_token
                 if start_pos_for_token < source_len:
                     actual_failing_char = source_code[start_pos_for_token]
                     tokens_output_list.append((actual_failing_char, "ERRO!", actual_failing_char))
                     pos += 1 
-                else: # Reached end of source
+                else: # Should not happen if pos < source_len is the loop condition
                     break
         return tokens_output_list, self.symbol_table
