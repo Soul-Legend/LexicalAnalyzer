@@ -10,7 +10,7 @@ TEST_CASES = [
         "re_definitions": (
             "ID: [a-zA-Z]([a-zA-Z]|[0-9])*\n"
             "NUM: [1-9]([0-9])*|0\n"
-            r"WS: ( |\t|\r|\n)+ %ignore"
+            r"WS: ( )+ %ignore"
         ),
         "source_code": (
             "a1 "
@@ -27,7 +27,7 @@ TEST_CASES = [
         "re_definitions": (
             "ER1: a?(a|b)+\n"
             "ER2: b?(a|b)+\n"
-            r"WS: ( |\t|\r|\n)+ %ignore"
+            r"WS: ( )+ %ignore"
         ),
         "source_code": (
             "aa "
@@ -67,7 +67,7 @@ TEST_CASES = [
             "SEMI: ;\n"
             "COMMENT_LINE: //([^\r\n])*\n" # %ignore not specified here, so it becomes a token
             "COMMENT_BLOCK: /*(.|[\r\n])*?*/ %ignore\n" # This complex one might need careful NFA construction
-            r"WS: ( |\t|\r|\n)+ %ignore"
+            r"WS: ( )+ %ignore"
         ),
         "source_code": (
             "if x = 10; // assign x "
@@ -86,7 +86,7 @@ TEST_CASES = [
             "CHAR_SQ: '([^'\\\\]|\\\\.)'\n"   # Single quoted char with escapes
             "ID: [a-z]+\n"
             "PUNCT: [.,!?;]\n"
-            r"WS: ( |\t|\r|\n)+ %ignore"
+            r"WS: ( )+ %ignore"
         ),
         "source_code": (
             "hello \"world\\\"!\" 'a' 'b\\'' "
@@ -100,7 +100,7 @@ TEST_CASES = [
             "A_PLUS_B: a+b\n"
             "A_OPT_B: a?b\n"
             "C_OR_D_STAR: (c|d)*\n"
-            r"WS: ( |\t|\r|\n)+ %ignore"
+            r"WS: ( )+ %ignore"
         ),
         "source_code": (
             "b "      # A_STAR_B, A_OPT_B
