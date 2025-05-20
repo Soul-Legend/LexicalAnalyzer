@@ -121,43 +121,48 @@ class Lexer:
                 else:
                     break
             
-            if temp_read_pos > start_pos_for_token and current_dfa_state in self.dfa.accept_states:
-                last_match_end_pos = temp_read_pos
-                last_match_lexeme = source_code[start_pos_for_token : temp_read_pos]
-                last_match_pattern_name = self.dfa.accept_states[current_dfa_state]
-            
             if last_match_pattern_name:
-                actual_token_type = last_match_pattern_name # Tipo base do token (ex: ID, IF, PLUS)
-                attribute = last_match_lexeme # Atributo padrão é o próprio lexema
+                actual_token_type = last_match_pattern_name
+                attribute = last_match_lexeme
 
-                # Lógica para %ignore
+                # Check for non-progress with empty match BEFORE other logic
+                if not last_match_lexeme and last_match_end_pos == start_pos_for_token:
+                    if start_pos_for_token < source_len: # Not at EOF
+                        # Matched an empty string, but current char was not consumed by it
+                        # and this empty match was the "longest".
+                        # Treat the current character as an error to ensure progress.
+                        actual_failing_char = source_code[start_pos_for_token]
+                        tokens_output_list.append((actual_failing_char, "ERRO!", actual_failing_char))
+                        pos = start_pos_for_token + 1
+                        continue # Skip further processing of the empty token
+                    # If at EOF and matched empty, it's fine, pos will become source_len below.
+                
+                # Now, handle ignore, reserved words, etc. for the (potentially non-empty) match
                 if last_match_pattern_name in self.patterns_to_ignore:
                     pos = last_match_end_pos
                     continue
 
-                # Verifica palavras reservadas
                 if last_match_lexeme.lower() in self.reserved_words:
-                    # Se for palavra reservada, o TIPO do token muda para o da palavra reservada
                     actual_token_type = self.reserved_words[last_match_lexeme.lower()]
                     attribute = None 
 
-                if actual_token_type == "ID": # Ou uma lista configurável de tipos que vão para TS
+                if actual_token_type == "ID": 
                     st_index = self.symbol_table.add_symbol(last_match_lexeme, "ID")
-                    attribute = st_index # Atributo para ID é o índice na TS
-                elif actual_token_type == "NUM": # Para números, o atributo pode ser o valor convertido
+                    attribute = st_index 
+                elif actual_token_type == "NUM": 
                     try:
                         attribute = float(last_match_lexeme) if '.' in last_match_lexeme else int(last_match_lexeme)
                     except ValueError:
                         attribute = last_match_lexeme 
 
-                tokens_output_list.append((last_match_lexeme, actual_token_type, attribute)) # (Lexema, TipoFinal, Atributo)
+                tokens_output_list.append((last_match_lexeme, actual_token_type, attribute))
                 pos = last_match_end_pos
             
-            else:
+            else: # No match found (last_match_pattern_name is None)
                 if start_pos_for_token < source_len:
                     actual_failing_char = source_code[start_pos_for_token]
                     tokens_output_list.append((actual_failing_char, "ERRO!", actual_failing_char))
                     pos += 1 
-                else:
+                else: # Reached end of source
                     break
-        return tokens_output_list, self.symbol_table # Retorna tokens e a TS populada
+        return tokens_output_list, self.symbol_table

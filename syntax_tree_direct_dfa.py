@@ -1,4 +1,3 @@
-# syntax_tree_direct_dfa.py
 from automata import DFA
 from config import EPSILON, CONCAT_OP
 
@@ -6,6 +5,7 @@ LITERAL_NODE = 'literal'
 CONCAT_NODE = 'concat'
 UNION_NODE = 'union'
 STAR_NODE = 'star'
+PLUS_NODE = 'plus'
 EPSILON_NODE = 'epsilon_literal'
 
 
@@ -84,15 +84,16 @@ def build_augmented_syntax_tree(infix_expr, position_nodes_map):
                 if not operand_stack: raise ValueError(f"Not enough operands for *")
                 child = operand_stack.pop()
                 operand_stack.append(AugmentedRegexSyntaxTreeNode(op_char, STAR_NODE, left=child))
+            elif op_char == '+': 
+                if not operand_stack: raise ValueError(f"Not enough operands for +")
+                child = operand_stack.pop()
+                operand_stack.append(AugmentedRegexSyntaxTreeNode(op_char, PLUS_NODE, left=child))
             elif op_char == '?':
                 if not operand_stack: raise ValueError(f"Not enough operands for ?")
                 child_R = operand_stack.pop()
                 epsilon_node_for_q = AugmentedRegexSyntaxTreeNode(EPSILON, EPSILON_NODE)
                 union_node = AugmentedRegexSyntaxTreeNode('|', UNION_NODE, left=child_R, right=epsilon_node_for_q)
                 operand_stack.append(union_node)
-            elif op_char == '+':
-                raise ValueError("Operator '+' should be expanded or handled with dedicated rules for Followpos tree.")
-
             elif op_char == CONCAT_OP or op_char == '|':
                 if len(operand_stack) < 2: raise ValueError(f"Not enough operands for {op_char}")
                 right = operand_stack.pop()
@@ -100,25 +101,41 @@ def build_augmented_syntax_tree(infix_expr, position_nodes_map):
                 node_type = CONCAT_NODE if op_char == CONCAT_OP else UNION_NODE
                 operand_stack.append(AugmentedRegexSyntaxTreeNode(op_char, node_type, left=left, right=right))
 
-    for char_code in processed_original_re:
-        if is_simple_literal(char_code) and char_code != EPSILON :
-            pos_node = PositionNode(char_code)
+    re_tokens = []
+    temp_i = 0
+    while temp_i < len(processed_original_re):
+        char = processed_original_re[temp_i]
+        if char == '\\':
+            if temp_i + 1 < len(processed_original_re):
+                re_tokens.append(processed_original_re[temp_i:temp_i+2])
+                temp_i += 2
+            else:
+                re_tokens.append(char)
+                temp_i += 1
+        else:
+            re_tokens.append(char)
+            temp_i += 1
+
+    for token_char_code in re_tokens:
+        if is_simple_literal(token_char_code) and token_char_code != EPSILON :
+            actual_symbol = token_char_code[1] if len(token_char_code) == 2 and token_char_code.startswith('\\') else token_char_code
+            pos_node = PositionNode(actual_symbol)
             position_nodes_map[pos_node.id] = pos_node
-            node = AugmentedRegexSyntaxTreeNode(char_code, LITERAL_NODE)
+            node = AugmentedRegexSyntaxTreeNode(actual_symbol, LITERAL_NODE)
             node.position_node = pos_node
             operand_stack.append(node)
-        elif char_code == '(':
-            operator_stack.append(char_code)
-        elif char_code == ')':
+        elif token_char_code == '(':
+            operator_stack.append(token_char_code)
+        elif token_char_code == ')':
             apply_pending_ops(0) 
             if not operator_stack or operator_stack[-1] != '(':
                 raise ValueError(f"Mismatched parentheses for augmented tree: {processed_original_re}")
             operator_stack.pop() 
-        elif char_code in ['*', CONCAT_OP, '|', '?', '+']: 
-            apply_pending_ops(precedence(char_code))
-            operator_stack.append(char_code)
+        elif token_char_code in ['*', CONCAT_OP, '|', '?', '+']: 
+            apply_pending_ops(precedence(token_char_code))
+            operator_stack.append(token_char_code)
         else: 
-            raise ValueError(f"Unknown char '{char_code}' in preprocessed regex for augmented tree: {processed_original_re}")
+            raise ValueError(f"Unknown token '{token_char_code}' in preprocessed regex for augmented tree: {processed_original_re}")
 
     apply_pending_ops(0) 
 
@@ -160,10 +177,15 @@ def compute_functions(node):
         if not node.left or not node.right: raise ValueError("Concat node missing children")
         node.nullable = node.left.nullable and node.right.nullable
         node.firstpos = node.left.firstpos.union(node.right.firstpos) if node.left.nullable else node.left.firstpos
-        node.lastpos = node.left.lastpos.union(node.right.lastpos) if node.right.nullable else node.right.lastpos
+        node.lastpos = node.right.lastpos.union(node.left.lastpos) if node.right.nullable else node.right.lastpos
     elif node.type == STAR_NODE:
         if not node.left: raise ValueError("Star node missing child")
         node.nullable = True
+        node.firstpos = node.left.firstpos
+        node.lastpos = node.left.lastpos
+    elif node.type == PLUS_NODE:
+        if not node.left: raise ValueError("Plus node missing child")
+        node.nullable = node.left.nullable
         node.firstpos = node.left.firstpos
         node.lastpos = node.left.lastpos
 
@@ -179,6 +201,10 @@ def compute_followpos(node):
             pos_i_obj.followpos.update(node.right.firstpos)        
     elif node.type == STAR_NODE:
         if not node.left: raise ValueError("Star node missing child for followpos")
+        for pos_i_obj in node.left.lastpos:
+            pos_i_obj.followpos.update(node.left.firstpos)
+    elif node.type == PLUS_NODE:
+        if not node.left: raise ValueError("Plus node missing child for followpos")
         for pos_i_obj in node.left.lastpos:
             pos_i_obj.followpos.update(node.left.firstpos)
 
