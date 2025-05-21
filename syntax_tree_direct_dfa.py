@@ -1,6 +1,7 @@
 from automata import DFA
 from config import EPSILON, CONCAT_OP
-from regex_utils import precedence, is_literal_char as is_simple_literal_char, preprocess_regex
+from regex_utils import precedence, is_literal_char as is_simple_literal_char, preprocess_regex, infix_to_postfix
+from automata import postfix_to_nfa, NFA, combine_nfas as thompson_combine_nfas, _finalize_nfa_properties
 
 
 LITERAL_NODE = 'literal'
@@ -146,29 +147,47 @@ def _build_tree_from_single_processed_re(processed_re_str, position_nodes_map):
 
 def build_augmented_syntax_tree(definitions, pattern_order, position_nodes_map, end_marker_map_ref):
     all_augmented_sub_trees = []
+    combined_re_for_nfa_display_parts = []
 
     for idx, pattern_name in enumerate(pattern_order):
         regex_str = definitions.get(pattern_name, "")
         if not regex_str:
             continue
 
+        unique_end_marker_symbol_for_tree = f"_EM_{pattern_name}_{idx}" 
+        
+        # For Followpos tree: (RE) . #_EM_PATTERNNAME_IDX_
+        # For NFA display, we might use a simpler RE, or the original one
+        # Let's form the combined RE for NFA display first
+        
+        # Parenthesize the original regex string if it contains operators that could clash with concatenation or union
+        # A simple heuristic: if it has high precedence ops or | outside groups, parenthesize.
+        # The preprocess_regex itself will handle internal grouping for char classes.
+        # Preprocess will also add concat ops correctly for the internal structure of the RE.
+        
+        # For the combined RE string that will be used for NFA union visualization:
+        # (RE1)|(RE2)|...
+        # The individual REs are already preprocessed (concat added) by preprocess_regex
+        # Then infix_to_postfix and postfix_to_nfa will handle them.
+        
+        # For the tree: ((RE1).#_EM_1_)|((RE2).#_EM_2_)...
+        # The _build_tree_from_single_processed_re expects a preprocessed RE for ONE pattern.
+        
         processed_single_re_str = preprocess_regex(regex_str)
         
         if not processed_single_re_str and regex_str != EPSILON :
             continue
-        
+            
         sub_tree_root = _build_tree_from_single_processed_re(processed_single_re_str, position_nodes_map)
 
         if sub_tree_root is None:
             continue
 
-        unique_end_marker_symbol = f"_EM_{pattern_name}_{idx}" 
-        
-        end_pos_node = PositionNode(unique_end_marker_symbol)
+        end_pos_node = PositionNode(unique_end_marker_symbol_for_tree)
         position_nodes_map[end_pos_node.id] = end_pos_node
         end_marker_map_ref[end_pos_node.id] = pattern_name
 
-        end_marker_tree_node = AugmentedRegexSyntaxTreeNode(unique_end_marker_symbol, LITERAL_NODE)
+        end_marker_tree_node = AugmentedRegexSyntaxTreeNode(unique_end_marker_symbol_for_tree, LITERAL_NODE)
         end_marker_tree_node.position_node = end_pos_node
         
         current_pattern_augmented_tree = AugmentedRegexSyntaxTreeNode(CONCAT_OP, CONCAT_NODE, 
@@ -177,13 +196,39 @@ def build_augmented_syntax_tree(definitions, pattern_order, position_nodes_map, 
         all_augmented_sub_trees.append(current_pattern_augmented_tree)
 
     if not all_augmented_sub_trees:
-        return None 
+        return None, ""
     
     final_root = all_augmented_sub_trees[0]
     for tree_to_union in all_augmented_sub_trees[1:]:
         final_root = AugmentedRegexSyntaxTreeNode('|', UNION_NODE, left=final_root, right=tree_to_union)
     
-    return final_root
+    # Construct the equivalent combined RE string for NFA visualization
+    # This is R_combined = (R1)|(R2)|...|(Rn)
+    # preprocess_regex will handle char classes and add implicit concats
+    # This combined_re_str is NOT used for the followpos tree itself, but for generating an NFA
+    # that is conceptually similar to how Thompson's combines things.
+    
+    re_strings_for_nfa_union = []
+    for pattern_name in pattern_order:
+        original_re = definitions.get(pattern_name, "")
+        if original_re:
+            # Ensure each RE is parenthesized if it's not a single literal/simple group
+            # to avoid precedence issues when joining with |
+            # preprocess_regex will handle internal structure like char classes
+            # A simple check: if it's not just a literal or already starts with '(' and ends with ')'
+            # or is a character class, wrap it.
+            # This is a heuristic; proper parsing of the original RE structure would be more robust here
+            # but preprocess_regex handles concat insertion which is the main concern.
+            # The key is that each R_i in R1|R2|...Rn must be a self-contained unit.
+            # Preprocess_regex itself adds parentheses around expanded char classes if they become unions.
+            if len(original_re) > 1 and not (original_re.startswith('(') and original_re.endswith(')')) and not (original_re.startswith('[') and original_re.endswith(']')):
+                 re_strings_for_nfa_union.append(f"({original_re})")
+            else:
+                 re_strings_for_nfa_union.append(original_re)
+
+    combined_re_str_for_nfa_display = "|".join(re_strings_for_nfa_union)
+    
+    return final_root, combined_re_str_for_nfa_display
 
 
 def compute_functions(node):
@@ -215,9 +260,9 @@ def compute_functions(node):
         node.nullable = True
         node.firstpos = node.left.firstpos
         node.lastpos = node.left.lastpos
-    elif node.type == PLUS_NODE: # (R)+ is R.R*
+    elif node.type == PLUS_NODE: 
         if not node.left: raise ValueError("Plus node missing child")
-        node.nullable = node.left.nullable # R is nullable iff R+ is nullable
+        node.nullable = node.left.nullable 
         node.firstpos = node.left.firstpos
         node.lastpos = node.left.lastpos
 
@@ -236,30 +281,71 @@ def compute_followpos(node):
         if not node.left: raise ValueError("Star node missing child for followpos")
         for pos_i_obj in node.left.lastpos:
             pos_i_obj.followpos.update(node.left.firstpos)
-    elif node.type == PLUS_NODE: # For R.R*, followpos of R's lastpos includes R*'s firstpos (which is R's firstpos)
+    elif node.type == PLUS_NODE: 
         if not node.left: raise ValueError("Plus node missing child for followpos")
-        for pos_i_obj in node.left.lastpos: # lastpos(R)
-            pos_i_obj.followpos.update(node.left.firstpos) # firstpos(R) from R* part
+        for pos_i_obj in node.left.lastpos: 
+            pos_i_obj.followpos.update(node.left.firstpos) 
 
 
 def regex_to_direct_dfa(definitions, pattern_order):
     PositionNode.reset_id_counter()
+    NFA.reset_state_ids() 
     position_nodes_map = {} 
     end_marker_pos_id_to_pattern_name = {}
+    
+    pseudo_nfa_for_display = None
 
     if not definitions or not pattern_order:
         dfa_empty_input = DFA()
         dfa_empty_input.start_state_id = dfa_empty_input._get_dfa_state_id(frozenset([-2])) 
-        return dfa_empty_input, None, {}
+        return dfa_empty_input, None, {}, None
 
-    root = build_augmented_syntax_tree(definitions, pattern_order, 
-                                       position_nodes_map, 
-                                       end_marker_pos_id_to_pattern_name)
+    root, combined_re_for_nfa_display = build_augmented_syntax_tree(
+        definitions, pattern_order, 
+        position_nodes_map, 
+        end_marker_pos_id_to_pattern_name
+    )
     
+    if combined_re_for_nfa_display:
+        try:
+            individual_nfas_for_display_union = {}
+            temp_pattern_order_for_nfa_display = []
+            temp_definitions_for_nfa_display = {}
+
+            for i, po_name in enumerate(pattern_order):
+                orig_re = definitions.get(po_name)
+                if orig_re:
+                    # We need to give unique names if we were to use thompson_combine_nfas directly
+                    # Or, build one NFA from the (R1)|(R2)|... string.
+                    # Let's try the latter, as it's simpler for display.
+                    # The combined_re_for_nfa_display is already R1|R2|...
+                    pass # No, we need individual NFAs if we want to use thompson_combine_nfas
+
+            # Option 1: Build individual NFAs and combine them
+            # This is more faithful to "União de Autômatos via e-transição"
+            nfas_map_for_thompson_combine = {}
+            for po_name in pattern_order:
+                regex_str = definitions.get(po_name, "")
+                if regex_str:
+                    postfix_tokens = infix_to_postfix(regex_str) # preprocess_regex is inside infix_to_postfix
+                    nfa = postfix_to_nfa(postfix_tokens)
+                    if nfa:
+                        nfas_map_for_thompson_combine[po_name] = nfa
+            
+            if nfas_map_for_thompson_combine:
+                nfa_start_state, nfa_accept_map, _ = thompson_combine_nfas(nfas_map_for_thompson_combine)
+                if nfa_start_state:
+                    pseudo_nfa_for_display = NFA(nfa_start_state, None) 
+                    # _finalize_nfa_properties(pseudo_nfa_for_display) # This is done by get_nfa_details_str logic
+                    pseudo_nfa_for_display.accept_map_for_display = nfa_accept_map 
+            
+        except Exception:
+            pseudo_nfa_for_display = None # Failed to create for display
+
     if root is None: 
         dfa_no_valid_patterns = DFA()
         dfa_no_valid_patterns.start_state_id = dfa_no_valid_patterns._get_dfa_state_id(frozenset([-2]))
-        return dfa_no_valid_patterns, None, position_nodes_map
+        return dfa_no_valid_patterns, None, position_nodes_map, pseudo_nfa_for_display
 
     compute_functions(root)
     compute_followpos(root)
@@ -274,17 +360,17 @@ def regex_to_direct_dfa(definitions, pattern_order):
     current_alphabet = set()
     for pos_id, pos_node_obj in position_nodes_map.items():
         if pos_id not in end_marker_pos_id_to_pattern_name: 
-            if pos_node_obj.symbol != EPSILON:
+            if pos_node_obj.symbol != EPSILON: # Epsilon itself is not part of the alphabet
                 current_alphabet.add(pos_node_obj.symbol)
     dfa.alphabet = current_alphabet
 
     if not s0_positions_ids and not root.nullable:
         dfa.start_state_id = dfa._get_dfa_state_id(frozenset([-2]))
-        return dfa, root, position_nodes_map
+        return dfa, root, position_nodes_map, pseudo_nfa_for_display
     
     dfa.start_state_id = dfa._get_dfa_state_id(s0_positions_ids)
     dfa_states_map[s0_positions_ids] = dfa.start_state_id
-    if s0_positions_ids or root.nullable : # Add to worklist if s0 has positions or if root is nullable (for acceptance check)
+    if s0_positions_ids or root.nullable : 
       unmarked_dfa_states_pos_id_sets.append(s0_positions_ids)
     
     processed_dfa_states_pos_id_sets = set()
@@ -332,4 +418,4 @@ def regex_to_direct_dfa(definitions, pattern_order):
             target_dfa_id = dfa_states_map[U_fset_ids]
             dfa.add_transition(current_dfa_state_id, char_a, target_dfa_id)
             
-    return dfa, root, position_nodes_map
+    return dfa, root, position_nodes_map, pseudo_nfa_for_display

@@ -7,7 +7,7 @@ from automata import (NFA, DFA, NFAState, postfix_to_nfa, _finalize_nfa_properti
                       combine_nfas, construct_unminimized_dfa_from_nfa, _minimize_dfa)
 from lexer_core import Lexer, parse_re_file_data, SymbolTable 
 from regex_utils import infix_to_postfix
-from syntax_tree_direct_dfa import regex_to_direct_dfa # Removed PositionNode import
+from syntax_tree_direct_dfa import regex_to_direct_dfa 
 from graph_drawer import draw_dfa_to_file
 from ui_formatters import get_nfa_details_str, get_dfa_table_str, get_dfa_anexo_ii_format
 from .ui_utils import update_display_tab, clear_dfa_image
@@ -55,10 +55,6 @@ def process_regular_expressions_callback(app_instance):
             messagebox.showerror("Erro ao Parsear Definições", f"Erro: {e}")
             return
     
-    # DFA reset is now handled per-method or inside the construction functions
-    # NFA.reset_state_ids() # Thompson specific
-    # PositionNode.reset_id_counter() # Called inside regex_to_direct_dfa
-
     app_instance.display_definitions_and_reserved_words()
     
     construction_details_builder = [f"Processando Definições ({app_instance.current_test_name}):\n"]
@@ -66,11 +62,11 @@ def process_regular_expressions_callback(app_instance):
     construction_details_builder.append("\n")
     
     process_successful = False
-    import traceback # For detailed error logging
+    import traceback 
 
     try:
         if app_instance.active_construction_method == "thompson":
-            NFA.reset_state_ids() # Reset for Thompson NFA construction
+            NFA.reset_state_ids() 
             DFA._next_dfa_id = 0 
             DFA._state_map = {}  
             has_any_valid_nfa = False
@@ -96,27 +92,41 @@ def process_regular_expressions_callback(app_instance):
         elif app_instance.active_construction_method == "tree_direct_dfa":
             DFA._next_dfa_id = 0 
             DFA._state_map = {}  
-            # PositionNode.reset_id_counter() is called inside regex_to_direct_dfa
-
+            
             if not app_instance.pattern_order or not app_instance.definitions:
                 update_display_tab(widgets, "ER ➔ NFA Ind. / Árvore+Followpos", "Nenhuma definição de RE para Followpos.")
                 if app_instance.current_frame_name != "FullTestMode":
                     messagebox.showwarning("Entrada Vazia", "Nenhuma definição de RE para Followpos.")
                 return
 
-            construction_details_builder.append(f"Construindo AFD Direto (Followpos) para TODAS as definições:\n")
-            
-            direct_dfa, aug_tree, pos_map = regex_to_direct_dfa(
+            direct_dfa, aug_tree, pos_map, pseudo_nfa_union_display = regex_to_direct_dfa(
                 app_instance.definitions, 
                 app_instance.pattern_order
             )
             
+            followpos_nfa_union_tab_content = []
+            if pseudo_nfa_union_display:
+                accept_map_for_disp = getattr(pseudo_nfa_union_display, 'accept_map_for_display', None)
+                followpos_nfa_union_tab_content.append(get_nfa_details_str(pseudo_nfa_union_display, "NFA Combinado Conceitual (União ε para Followpos)", combined_accept_map=accept_map_for_disp))
+                followpos_nfa_union_tab_content.append("\n\n====================\n\n")
+            else:
+                followpos_nfa_union_tab_content.append("NFA Combinado Conceitual (União ε para Followpos): Não gerado ou falha.\n\n====================\n\n")
+
+            if direct_dfa:
+                followpos_nfa_union_tab_content.append(get_dfa_table_str(direct_dfa, f"AFD Direto Consolidado (Não-Minimizado)"))
+            else:
+                followpos_nfa_union_tab_content.append("AFD Direto Consolidado (Não-Minimizado): Falha na geração.")
+
+            update_display_tab(widgets, "NFA Combinado (União ε) / AFD Direto (Não-Minim.)", "\n".join(followpos_nfa_union_tab_content))
+
+
             if direct_dfa and aug_tree and pos_map:
                 app_instance.unminimized_dfa = direct_dfa 
                 app_instance.augmented_syntax_tree_followpos = aug_tree
                 app_instance.followpos_table_followpos = pos_map
                 
-                construction_details_builder.append(f"  Árvore Aumentada Combinada (pode ser grande e omitida aqui por brevidade se necessário, verificar UI):\n{aug_tree}\n") # Consider limiting display if too large
+                construction_details_builder.append(f"Construindo AFD Direto (Followpos) para TODAS as definições:\n")
+                construction_details_builder.append(f"  Árvore Aumentada Combinada:\n{aug_tree}\n") 
                 
                 fp_details = ["  Tabela Followpos (Consolidada):"]
                 sorted_pos_ids = sorted(pos_map.keys())
@@ -126,20 +136,11 @@ def process_regular_expressions_callback(app_instance):
                     fp_details.append(f"    {pnode}: {{ {', '.join(map(str,fp_obj_ids_sorted))} }}")
                 construction_details_builder.append("\n".join(fp_details) + "\n")
                 
-                update_display_tab(widgets, "NFA Combinado (União ε) / AFD Direto (Não-Minim.)", 
-                                   get_dfa_table_str(direct_dfa, f"AFD Direto Consolidado (Não-Minimizado)"))
                 process_successful = True
-            else: # Some failure in direct_dfa construction
-                construction_details_builder.append(f"  Falha ao gerar AFD direto consolidado.\n")
-                if direct_dfa and not aug_tree : # DFA might be an empty placeholder if tree failed
-                     update_display_tab(widgets, "NFA Combinado (União ε) / AFD Direto (Não-Minim.)", 
-                                   get_dfa_table_str(direct_dfa, f"AFD Direto (Falha na Árvore ou Sem Padrões Válidos)"))
-                elif not direct_dfa:
-                     update_display_tab(widgets, "NFA Combinado (União ε) / AFD Direto (Não-Minim.)", 
-                                   "Falha completa na geração do AFD Direto.")
-
-
-            if process_successful and widgets.get("generate_dfa_button") and app_instance.current_frame_name != "FullTestMode": 
+            else: 
+                construction_details_builder.append(f"  Falha ao gerar árvore ou followpos para AFD direto consolidado.\n")
+            
+            if process_successful and direct_dfa and widgets.get("generate_dfa_button") and app_instance.current_frame_name != "FullTestMode": 
                 widgets["generate_dfa_button"].configure(state="normal")
         
         update_display_tab(widgets, "ER ➔ NFA Ind. / Árvore+Followpos", "".join(construction_details_builder))
@@ -167,7 +168,7 @@ def combine_all_nfas_callback(app_instance):
     nfas_for_combination = {k: v for k,v in app_instance.individual_nfas.items() if v is not None}
     if not nfas_for_combination: messagebox.showerror("Sem NFAs Válidos", "Nenhum NFA individual válido para combinar."); return
 
-    import traceback # For detailed error logging
+    import traceback 
     try:
         DFA._next_dfa_id = 0 
         DFA._state_map = {}
@@ -205,7 +206,7 @@ def generate_final_dfa_and_minimize_callback(app_instance):
 
     app_instance.dfa = None 
     dfa_tables_display_builder = []
-    import traceback # For detailed error logging
+    import traceback 
 
     try:
         if not app_instance.unminimized_dfa:
@@ -252,10 +253,10 @@ def draw_current_minimized_dfa_callback(app_instance):
         return
     
     test_name_slug = "".join(c if c.isalnum() else "_" for c in app_instance.current_test_name)
-    if not test_name_slug: test_name_slug = "default_test" # Fallback
+    if not test_name_slug: test_name_slug = "default_test" 
     filename_prefix = f"dfa_graph_{test_name_slug}"
     
-    import traceback # For detailed error logging
+    import traceback 
     try:
         image_path = draw_dfa_to_file(app_instance.dfa, filename_prefix=filename_prefix, output_subdir=app_instance.images_output_dir, view=False)
         
@@ -268,11 +269,10 @@ def draw_current_minimized_dfa_callback(app_instance):
 
             if tab_view_widget:
                  try:
-                    # Check if the tab "Desenho AFD Minimizado" exists and get it
                     if "Desenho AFD Minimizado" in tab_view_widget._name_list:
                         tab_index = tab_view_widget._name_list.index("Desenho AFD Minimizado")
                         tab_widget_for_drawing = tab_view_widget._tab_dict["Desenho AFD Minimizado"]
-                    else: # Fallback if tab name changed or not found
+                    else: 
                         tab_widget_for_drawing = tab_view_widget 
                  except (AttributeError, ValueError, KeyError): 
                     tab_widget_for_drawing = tab_view_widget 
@@ -291,15 +291,14 @@ def draw_current_minimized_dfa_callback(app_instance):
             
             if new_height > max_tab_height:
                 new_height = max_tab_height
-                new_width = int(new_height * img_aspect_ratio) if img_aspect_ratio != 0 else max_tab_width # ensure width is also constrained
+                new_width = int(new_height * img_aspect_ratio) if img_aspect_ratio != 0 else max_tab_width 
 
-            # Re-check width constraint after height adjustment
             if new_width > max_tab_width:
                 new_width = max_tab_width
                 new_height = int(new_width / img_aspect_ratio) if img_aspect_ratio != 0 else max_tab_height
 
-            new_width = max(1, int(new_width)) # Ensure int and at least 1
-            new_height = max(1, int(new_height)) # Ensure int and at least 1
+            new_width = max(1, int(new_width)) 
+            new_height = max(1, int(new_height)) 
 
 
             resized_image = pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
@@ -373,7 +372,7 @@ def tokenize_source_callback(app_instance):
         update_display_tab(widgets, "Tabela de Símbolos (Definições & Dinâmica)", "Tabela de Símbolos (Dinâmica):\n(Nenhum texto fonte para analisar)")
         return
     
-    import traceback # For detailed error logging
+    import traceback 
     try:
         tokens_data_list, populated_symbol_table = app_instance.lexer.tokenize(source_code)
         
