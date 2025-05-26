@@ -1,0 +1,5 @@
+.venv
+.venv/*
+imagens/*
+__pycache__
+__pycache__/*
