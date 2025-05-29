@@ -383,11 +383,11 @@ def tokenize_source_callback(app_instance):
             for lexema, token_type, attribute in tokens_data_list:
                 if token_type == "ERRO!":
                     output_lines.append(f"<{lexema}, {token_type}>")
-                elif token_type == "ID" and isinstance(attribute, int): 
-                    output_lines.append(f"<{token_type}, {attribute}>  (Lexema: '{lexema}')")
-                elif isinstance(attribute, (int, float)):
+                elif token_type == "ID": # Verifica se o tipo é ID
+                    output_lines.append(f"<{lexema}, {token_type}>") # Exibe <lexema, ID>
+                elif isinstance(attribute, (int, float)): # Para NUM tokens
                      output_lines.append(f"<{lexema}, {token_type}> (Valor: {attribute})")
-                else: 
+                else: # Para palavras reservadas e outros literais
                     output_lines.append(f"<{lexema}, {token_type}>")
 
         update_display_tab(widgets, "Saída do Analisador Léxico (Tokens)", "\n".join(output_lines))

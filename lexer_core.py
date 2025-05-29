@@ -1,13 +1,17 @@
-# lexer_core.py
 class SymbolTable:
     def __init__(self):
-        self.table = [] 
-        self.lexeme_to_index = {} 
+        self.table = []
+        self.lexeme_to_index = {}
 
-    def add_symbol(self, lexeme, token_type_base):
+    def add_symbol(self, lexeme, token_type):
+        """
+        Adds a lexeme and its token type to the symbol table.
+        If the lexeme already exists, its existing index is returned.
+        Assumes the lexer resolves a lexeme to a single definitive token_type.
+        """
         if lexeme not in self.lexeme_to_index:
             index = len(self.table)
-            entry = {"lexeme": lexeme, "token_type_base": token_type_base}
+            entry = {"lexeme": lexeme, "token_type": token_type}
             self.table.append(entry)
             self.lexeme_to_index[lexeme] = index
             return index
@@ -17,7 +21,7 @@ class SymbolTable:
         if 0 <= index < len(self.table):
             return self.table[index]
         return None
-    
+
     def get_index(self, lexeme):
         return self.lexeme_to_index.get(lexeme)
 
@@ -27,11 +31,11 @@ class SymbolTable:
 
     def __str__(self):
         if not self.table:
-            return "Tabela de Símbolos vazia."
-        header = f"{'Índice':<7} | {'Lexema':<20} | {'Tipo Base':<10}\n" + "-"*45
+            return "Tabela de Símbolos (Dinâmica) vazia."
+        header = f"{'Índice':<7} | {'Lexema':<20} | {'Tipo':<15}\n" + "-"*47
         rows = [header]
         for i, entry in enumerate(self.table):
-            rows.append(f"{i:<7} | {entry['lexeme']:<20} | {entry['token_type_base']:<10}")
+            rows.append(f"{i:<7} | {entry['lexeme']:<20} | {entry['token_type']:<15}")
         return "\n".join(rows)
 
 
@@ -45,7 +49,7 @@ def parse_re_file_data(re_file_content):
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        
+
         directive_ignore = "%ignore"
         should_ignore = False
         if directive_ignore in line:
@@ -55,7 +59,7 @@ def parse_re_file_data(re_file_content):
         if ':' not in line:
             print(f"Warning: Malformed line {line_num+1} (no ':'): '{line}'. Skipping.")
             continue
-        
+
         name_part, regex_part = line.split(':', 1)
         name = name_part.strip()
         regex = regex_part.strip()
@@ -70,13 +74,14 @@ def parse_re_file_data(re_file_content):
         definitions[name] = regex
         if name not in pattern_order:
             pattern_order.append(name)
-        
+
         if should_ignore:
             patterns_to_ignore.add(name)
 
-        if name.isupper() and regex.islower() and name.lower() == regex:
-            reserved_words_defs[regex] = name 
-            
+        is_likely_reserved = name.isupper() and name.lower() == regex
+        if is_likely_reserved:
+            reserved_words_defs[regex] = name
+
     return definitions, pattern_order, reserved_words_defs, patterns_to_ignore
 
 
@@ -88,82 +93,81 @@ class Lexer:
         self.symbol_table = symbol_table_instance if symbol_table_instance else SymbolTable()
 
     def tokenize(self, source_code):
-        self.symbol_table.clear() 
-        tokens_output_list = [] 
-        
+        self.symbol_table.clear()
+        tokens_output_list = []
+
         pos = 0
         source_len = len(source_code)
 
         while pos < source_len:
             current_dfa_state = self.dfa.start_state_id
             start_pos_for_token = pos
-            
+
             last_match_end_pos = -1
             last_match_lexeme = ""
-            last_match_pattern_name = None
+            base_pattern_name_from_dfa = None
 
             temp_read_pos = pos
-            
-            # Try to match as long as possible
+
             while temp_read_pos < source_len:
                 char_to_read = source_code[temp_read_pos]
-                
-                # Check if current_dfa_state is an accept state BEFORE trying to transition
+
                 if current_dfa_state in self.dfa.accept_states:
-                    last_match_end_pos = temp_read_pos 
+                    last_match_end_pos = temp_read_pos
                     last_match_lexeme = source_code[start_pos_for_token : temp_read_pos]
-                    last_match_pattern_name = self.dfa.accept_states[current_dfa_state]
+                    base_pattern_name_from_dfa = self.dfa.accept_states[current_dfa_state]
 
                 if (current_dfa_state, char_to_read) in self.dfa.transitions:
                     current_dfa_state = self.dfa.transitions[(current_dfa_state, char_to_read)]
                     temp_read_pos += 1
                 else:
-                    # Cannot transition further with this char_to_read
                     break
             
-            # After the loop, check if the final state reached is an accept state
             if temp_read_pos > start_pos_for_token and current_dfa_state in self.dfa.accept_states:
-                # This match is potentially longer than previous one if loop broke on valid transition
                 last_match_end_pos = temp_read_pos
                 last_match_lexeme = source_code[start_pos_for_token : temp_read_pos]
-                last_match_pattern_name = self.dfa.accept_states[current_dfa_state]
+                base_pattern_name_from_dfa = self.dfa.accept_states[current_dfa_state]
             
-            if last_match_pattern_name: # A valid token was found
-                actual_token_type = last_match_pattern_name 
-                attribute = last_match_lexeme
 
+            if base_pattern_name_from_dfa:
                 if not last_match_lexeme and last_match_end_pos == start_pos_for_token:
-                    if start_pos_for_token < source_len:
-                        actual_failing_char = source_code[start_pos_for_token]
-                        tokens_output_list.append((actual_failing_char, "ERRO!", actual_failing_char))
+                    if base_pattern_name_from_dfa not in self.patterns_to_ignore:
+                        error_char_display = source_code[start_pos_for_token : start_pos_for_token+1] if start_pos_for_token < source_len else "<EOF>"
+                        tokens_output_list.append((error_char_display, "ERRO!", f"Zero-length match by {base_pattern_name_from_dfa} at pos {start_pos_for_token}"))
                         pos = start_pos_for_token + 1
                         continue
-                
-                if last_match_pattern_name in self.patterns_to_ignore:
+
+                if base_pattern_name_from_dfa in self.patterns_to_ignore:
                     pos = last_match_end_pos
+                    if last_match_end_pos == start_pos_for_token:
+                        pos +=1
                     continue
 
+                final_token_type = base_pattern_name_from_dfa
+                attribute_for_stream = last_match_lexeme
+
                 if last_match_lexeme.lower() in self.reserved_words:
-                    actual_token_type = self.reserved_words[last_match_lexeme.lower()]
-                    attribute = None 
+                    final_token_type = self.reserved_words[last_match_lexeme.lower()]
+                    attribute_for_stream = None
 
-                if actual_token_type == "ID":
-                    st_index = self.symbol_table.add_symbol(last_match_lexeme, "ID")
-                    attribute = st_index 
-                elif actual_token_type == "NUM": 
+                self.symbol_table.add_symbol(last_match_lexeme, final_token_type)
+
+                if final_token_type == "ID":
+                    attribute_for_stream = self.symbol_table.get_index(last_match_lexeme)
+                elif final_token_type == "NUM":
                     try:
-                        attribute = float(last_match_lexeme) if '.' in last_match_lexeme else int(last_match_lexeme)
+                        attribute_for_stream = float(last_match_lexeme) if '.' in last_match_lexeme else int(last_match_lexeme)
                     except ValueError:
-                        attribute = last_match_lexeme 
-
-                tokens_output_list.append((last_match_lexeme, actual_token_type, attribute))
-                pos = last_match_end_pos 
+                        attribute_for_stream = last_match_lexeme
+                
+                tokens_output_list.append((last_match_lexeme, final_token_type, attribute_for_stream))
+                pos = last_match_end_pos
             
-            else: # No token could be formed starting at start_pos_for_token
+            else:
                 if start_pos_for_token < source_len:
                     actual_failing_char = source_code[start_pos_for_token]
                     tokens_output_list.append((actual_failing_char, "ERRO!", actual_failing_char))
-                    pos += 1 
-                else: # Should not happen if pos < source_len is the loop condition
+                    pos += 1
+                else: 
                     break
         return tokens_output_list, self.symbol_table
