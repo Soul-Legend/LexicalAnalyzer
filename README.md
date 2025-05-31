@@ -38,15 +38,24 @@ pip install customtkinter Pillow graphviz
 ```
 ## Project Structure
 
-├── front/                  # GUI components (app, frames, callbacks, controls, ui_utils)
+├── front/     # GUI components (app, frames, callbacks, controls, ui_utils)
+
 ├── tests.py                # Predefined test cases
+
 ├── automata.py             # NFA, DFA, and related algorithms (Thompson's, subset construction, minimization)
+
 ├── config.py               # Configuration constants (e.g., EPSILON)
+
 ├── graph_drawer.py         # DFA visualization using Graphviz
+
 ├── lexer_core.py           # Lexer, symbol table, RE file parsing
+
 ├── main.py                 # Main application entry point
+
 ├── regex_utils.py          # Utilities for RE preprocessing, infix-to-postfix, precedence
+
 ├── syntax_tree_direct_dfa.py # Direct DFA construction (syntax tree, followpos)
+
 ├── ui_formatters.py        # Helper functions to format automata details for display
 
 ## Usage
