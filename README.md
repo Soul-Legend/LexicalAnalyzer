@@ -154,6 +154,7 @@ TOKEN_NAME: RegularExpression
 ```
 Example:
 ```
+ER1: aa*(bb*aa*b)*
 ID: [a-zA-Z_][a-zA-Z0-9_]*
 NUM: [0-9]+(\.[0-9]+)?
 IF: if
