@@ -15,9 +15,9 @@ def create_start_screen_frame(app_instance):
     ctk.CTkLabel(title_text_frame, text="Trabalho 1 - Linguagens Formais e Compiladores", font=app_instance.font_subtitle, anchor="w", text_color=("gray30", "gray70")).pack(fill="x")
 
     buttons_frame = ctk.CTkFrame(frame, fg_color="transparent")
-    buttons_frame.pack(pady=20, padx=60, fill="x") # Ajustado padx
+    buttons_frame.pack(pady=20, padx=60, fill="x") 
     buttons_frame.grid_columnconfigure((0,1), weight=1)
-    buttons_frame.grid_rowconfigure((0,1,2), weight=1) # Adicionada linha para novo modo
+    buttons_frame.grid_rowconfigure((0,1), weight=1) 
 
     manual_thompson_button = ctk.CTkButton(buttons_frame, text="📝 Modo Manual (Thompson)",
                                   command=lambda: app_instance.show_frame("ManualMode", construction_method="thompson"),
@@ -29,19 +29,19 @@ def create_start_screen_frame(app_instance):
                                   height=60, font=app_instance.font_button)
     manual_tree_button.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
 
-    auto_button = ctk.CTkButton(buttons_frame, text="⚙️ Modo Testes Detalhados (Thompson)",
-                                command=lambda: app_instance.show_frame("AutoTestMode"), # Antigo modo de teste
-                                height=60, font=app_instance.font_button)
-    auto_button.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
+    # auto_button = ctk.CTkButton(buttons_frame, text="⚙️ Modo Testes Detalhados (Thompson)",
+    #                             command=lambda: app_instance.show_frame("AutoTestMode"), # Antigo modo de teste
+    #                             height=60, font=app_instance.font_button)
+    # auto_button.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
     
     full_auto_button = ctk.CTkButton(buttons_frame, text="🚀 Modo Teste Completo (Automático)",
                                 command=lambda: app_instance.show_frame("FullTestMode"), # Novo modo
                                 height=60, font=app_instance.font_button)
-    full_auto_button.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
+    full_auto_button.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="ew") 
     
     bottom_frame = ctk.CTkFrame(frame, fg_color="transparent")
     bottom_frame.pack(side="bottom", pady=(20, max(app_instance.winfo_height() // 10, 40)), padx=20, fill="x")
-    credits_label = ctk.CTkLabel(bottom_frame, text="Desenvolvido por: Pedro Taglialenha, Vitor Praxedes & Enrico Caliolo", font=app_instance.font_credits, text_color=("gray50", "gray50"))
+    credits_label = ctk.CTkLabel(bottom_frame, text="Desenvolvido por: Pedro Taglialenha, Vitor Praxedes & Enrico Caliolo ", font=app_instance.font_credits, text_color=("gray50", "gray50"))
     credits_label.pack(pady=(0, 20))
     exit_button = ctk.CTkButton(bottom_frame, text="Sair", command=app_instance.quit, width=120, font=app_instance.font_small_button, fg_color="transparent", border_width=1, border_color=("gray70", "gray30"), hover_color=("gray85", "gray20"))
     exit_button.pack()
@@ -53,9 +53,9 @@ def create_manual_mode_frame_widgets(app_instance):
     app_instance.manual_mode_widgets["re_input_textbox"].insert("0.0", "# Defina suas expressões regulares aqui.\n# Ex: ID: (a|b)*abb\n# Ex: IF: if\n# Ex: WS: [ \t\n]+ %ignore\n")
     app_instance.manual_mode_widgets["source_code_input_textbox"].insert("0.0", "// Código fonte para teste.")
 
-def create_auto_test_mode_frame_widgets(app_instance): # Antigo modo de teste detalhado
+def create_auto_test_mode_frame_widgets(app_instance): 
     frame = ctk.CTkFrame(app_instance.container)
-    app_instance.frames["AutoTestMode"] = frame # Este é o modo de teste passo-a-passo
+    app_instance.frames["AutoTestMode"] = frame 
     app_instance.auto_test_mode_widgets = create_shared_controls_and_display(frame, app_instance) 
     
     scrollable_control_panel = app_instance.auto_test_mode_widgets["control_frame"] 
@@ -131,7 +131,7 @@ def create_full_test_mode_frame_widgets(app_instance):
         "Saída do Analisador Léxico (Tokens)"
     ]
     textboxes_map = {} 
-    app_instance.full_test_mode_widgets["dfa_image_label"] = None # Para este frame específico
+    app_instance.full_test_mode_widgets["dfa_image_label"] = None 
 
     for name in tab_names:
         tab = right_panel.add(name)
