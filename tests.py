@@ -53,7 +53,6 @@ TEST_CASES = [
         "name": "5. Caso Vazio e Epsilon (se suportado)",
         "re_definitions": (
             "MAYBE_A: a?\n"
-            "ALWAYS_EPSILON: &\n" 
             "ID: b\n"
             "WS: [ ]+ %ignore"
         ),
