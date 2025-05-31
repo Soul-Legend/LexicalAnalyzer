@@ -20,7 +20,7 @@ This project is a Lexical Analyzer Generator implemented in Python. It allows us
     *   **Full Test Mode:** Automated execution of predefined test cases, allowing selection of the DFA construction method.
 *   **Output Formats:**
     *   DFA transition tables in a human-readable format.
-    *   DFA transition tables in a specified format for automated checking (Anexo II).
+    *   DFA transition tables in a specified format for automated checking.
     *   List of generated tokens.
 
 ## Prerequisites
