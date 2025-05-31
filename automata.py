@@ -102,6 +102,11 @@ def build_nfa_optional(nfa_operand):
     return new_nfa
 
 def _finalize_nfa_properties(nfa):
+    '''
+    Passa por cada estado e transição do automato para descobrir
+    cada um de seus estados e simbolos e preencher os atributos
+    states e alphabet.
+    '''
     all_nfa_states, nfa_alphabet = set(), set()
     if not nfa or not nfa.start_state: return nfa 
 
@@ -136,6 +141,12 @@ def _finalize_nfa_properties(nfa):
     return nfa
 
 def postfix_to_nfa(postfix_tokens_list):
+    '''
+    Transforma ER posfixa em automato não deterministico ao interpretar 
+    cada subexpressão da ER como um automato e utilizar a propriedade de união
+    por epsilon para unir cada um dos automatos gerados em um único automato
+    não deterministico que é capaz de reconhecer a linguagem descrita pela ER.
+    '''
     from regex_utils import is_token_literal
     from config import CONCAT_OP
 

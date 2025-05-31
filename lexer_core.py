@@ -109,6 +109,8 @@ class Lexer:
 
             temp_read_pos = pos
 
+            # Consome entrada e avança sobre os estados do automato
+            # Quando chega a um estado de aceitação, anota que passou por ele
             while temp_read_pos < source_len:
                 char_to_read = source_code[temp_read_pos]
 
@@ -128,8 +130,9 @@ class Lexer:
                 last_match_lexeme = source_code[start_pos_for_token : temp_read_pos]
                 base_pattern_name_from_dfa = self.dfa.accept_states[current_dfa_state]
             
-
+            # Se chegou num estado de aceitação
             if base_pattern_name_from_dfa:
+                # Se é um token vazio, acusa erro
                 if not last_match_lexeme and last_match_end_pos == start_pos_for_token:
                     if base_pattern_name_from_dfa not in self.patterns_to_ignore:
                         error_char_display = source_code[start_pos_for_token : start_pos_for_token+1] if start_pos_for_token < source_len else "<EOF>"
@@ -137,6 +140,7 @@ class Lexer:
                         pos = start_pos_for_token + 1
                         continue
 
+                # Se é um padrão a ser ignorado, ignora
                 if base_pattern_name_from_dfa in self.patterns_to_ignore:
                     pos = last_match_end_pos
                     if last_match_end_pos == start_pos_for_token:
@@ -146,10 +150,12 @@ class Lexer:
                 final_token_type = base_pattern_name_from_dfa
                 attribute_for_stream = last_match_lexeme
 
+                # Se é uma palavra reservada, anota que o tipo do token é a palavra reservada
                 if last_match_lexeme.lower() in self.reserved_words:
                     final_token_type = self.reserved_words[last_match_lexeme.lower()]
                     attribute_for_stream = None
 
+                # Adiciona a tabela de simbolos o lexema e o token
                 self.symbol_table.add_symbol(last_match_lexeme, final_token_type)
 
                 if final_token_type == "ID":
@@ -162,7 +168,7 @@ class Lexer:
                 
                 tokens_output_list.append((last_match_lexeme, final_token_type, attribute_for_stream))
                 pos = last_match_end_pos
-            
+            # Se não chegou num estado de aceitação, anota que aconteceu um erro e continua análise
             else:
                 if start_pos_for_token < source_len:
                     actual_failing_char = source_code[start_pos_for_token]

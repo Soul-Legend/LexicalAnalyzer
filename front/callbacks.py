@@ -39,6 +39,7 @@ def process_regular_expressions_callback(app_instance):
     widgets = app_instance.get_current_mode_widgets()
     if not widgets: return
 
+    # Le expressoes regulares da entrada e as guarda ------------------------------------
     re_content_for_parsing = ""
     if app_instance.current_frame_name != "FullTestMode":
         re_input_tb = widgets.get("re_input_textbox")
@@ -50,6 +51,10 @@ def process_regular_expressions_callback(app_instance):
             messagebox.showerror("Entrada Vazia", "Nenhuma definição regular fornecida."); return
         
         try:
+            # Le caixa de ERs e as guarda no dicionario de definicoes.
+            # Ordem é uma lista
+            # Palavras reservadas é um dicionario
+            # Patterns to ignore é um conjunto
             app_instance.definitions, app_instance.pattern_order, app_instance.reserved_words_defs, app_instance.patterns_to_ignore = parse_re_file_data(re_content_for_parsing)
         except Exception as e:
             messagebox.showerror("Erro ao Parsear Definições", f"Erro: {e}")
@@ -63,13 +68,14 @@ def process_regular_expressions_callback(app_instance):
     
     process_successful = False
     import traceback 
-
+    # Transforma ER em Automato  ------------------------------------
     try:
         if app_instance.active_construction_method == "thompson":
             NFA.reset_state_ids() 
             DFA._next_dfa_id = 0 
             DFA._state_map = {}  
             has_any_valid_nfa = False
+            # Cada definição é transformada em um automato e adiciona lista de automatos individuais
             for name in app_instance.pattern_order:
                 regex_str = app_instance.definitions.get(name, "")
                 if not regex_str: continue
