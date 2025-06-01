@@ -1,0 +1,2 @@
+ID: aa*(bb*aa*b)*
+WS: [ ]%ignore

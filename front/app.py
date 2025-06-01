@@ -147,7 +147,11 @@ class LexerGeneratorApp(ctk.CTk):
         if not widgets: return
         widget = widgets.get(widget_key)
         if widget:
-            update_text_content(widget, content)
+            should_keep_editable = False 
+            if self.current_frame_name == "ManualMode":
+                if widget_key in ["re_input_textbox", "source_code_input_textbox"]:
+                    should_keep_editable = True
+            update_text_content(widget, content, keep_editable=should_keep_editable)
         else:
             pass
 
@@ -158,7 +162,6 @@ class LexerGeneratorApp(ctk.CTk):
             re_textbox_key = "re_display_textbox"
         self._update_widget_text(re_textbox_key, content)
         
-        # No FullTestMode, o reset é feito pelo run_full_test_case, não aqui.
         if self.current_frame_name != "FullTestMode": 
             self.reset_app_state()
 
@@ -237,8 +240,9 @@ class LexerGeneratorApp(ctk.CTk):
 
         self.reset_app_state() 
 
-        update_text_content(current_widgets_for_full_test.get("re_display_textbox"), test_case["re_definitions"])
-        update_text_content(current_widgets_for_full_test.get("source_display_textbox"), test_case["source_code"])
+        update_text_content(current_widgets_for_full_test.get("re_display_textbox"), test_case["re_definitions"], keep_editable=False) # Display only
+        update_text_content(current_widgets_for_full_test.get("source_display_textbox"), test_case["source_code"], keep_editable=False) # Display only
+
 
         try:
             self.definitions, self.pattern_order, self.reserved_words_defs, self.patterns_to_ignore = parse_re_file_data(test_case["re_definitions"])
