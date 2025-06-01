@@ -90,12 +90,12 @@ TEST_CASES = [
         "re_definitions": (
             "KW_FUNCTION: function\n"
             "KW_VAR: var\n"
+            "TYPE_HINT: int|string|float|bool|void\n"
             "ID: [a-zA-Z_][a-zA-Z0-9_]*\n"
             "LPAREN: \\(\n"
             "RPAREN: \\)\n"
             "COMMA: ,\n"
             "COLON: :\n"
-            "TYPE_HINT: int|string|float|bool|void\n"
             "ARROW: ->\n"
             "EQ: =\n"
             "NUMBER: [0-9]+\n"

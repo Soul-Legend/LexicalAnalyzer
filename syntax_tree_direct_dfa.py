@@ -360,8 +360,7 @@ def regex_to_direct_dfa(definitions, pattern_order):
     current_alphabet = set()
     for pos_id, pos_node_obj in position_nodes_map.items():
         if pos_id not in end_marker_pos_id_to_pattern_name: 
-            if pos_node_obj.symbol != EPSILON: # Epsilon itself is not part of the alphabet
-                current_alphabet.add(pos_node_obj.symbol)
+            current_alphabet.add(pos_node_obj.symbol)
     dfa.alphabet = current_alphabet
 
     if not s0_positions_ids and not root.nullable:
