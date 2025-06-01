@@ -163,7 +163,7 @@ TEST_CASES = [
             "LIT_DOT: \\.\n"
             "WS: [ ]+ %ignore"
         ),
-        "source_code": "* + ? | . \\* \\+ \\."
+        "source_code": "* + ? | ."
     },
     {
         "name": "14. Ignorando Espaços e Múltiplas Definições Simples",
