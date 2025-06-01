@@ -182,7 +182,7 @@ WS: [ ]+ %ignore
 
        *  Escaped characters within classes: [\-\]] (for literal hyphen or closing bracket).
 
-   *  Escaped Metacharacters: \., \*, \+, \?, \|, \(, \), \[, \], \\.
+   *  Escaped Metacharacters: \\., \\*, \\+, \\?, \\|, \\(, \\), \\[, \\], \\\ .
 
   *   Epsilon: & (e.g., a? is equivalent to a|&).
 
