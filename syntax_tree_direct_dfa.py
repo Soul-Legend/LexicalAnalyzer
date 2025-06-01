@@ -321,11 +321,7 @@ def regex_to_direct_dfa(definitions, pattern_order):
             for i, po_name in enumerate(pattern_order):
                 orig_re = definitions.get(po_name)
                 if orig_re:
-                    # We need to give unique names if we were to use thompson_combine_nfas directly
-                    # Or, build one NFA from the (R1)|(R2)|... string.
-                    # Let's try the latter, as it's simpler for display.
-                    # The combined_re_for_nfa_display is already R1|R2|...
-                    pass # No, we need individual NFAs if we want to use thompson_combine_nfas
+                    pass
 
             nfas_map_for_thompson_combine = {}
             for po_name in pattern_order:
@@ -340,7 +336,6 @@ def regex_to_direct_dfa(definitions, pattern_order):
                 nfa_start_state, nfa_accept_map, _ = thompson_combine_nfas(nfas_map_for_thompson_combine)
                 if nfa_start_state:
                     pseudo_nfa_for_display = NFA(nfa_start_state, None) 
-                    # _finalize_nfa_properties(pseudo_nfa_for_display) # This is done by get_nfa_details_str logic
                     pseudo_nfa_for_display.accept_map_for_display = nfa_accept_map 
             
         except Exception:
