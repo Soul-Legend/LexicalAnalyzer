@@ -1,15 +1,21 @@
 from tkinter import filedialog, messagebox
 import os
 from PIL import Image
-import customtkinter as ctk 
+import customtkinter as ctk
 
-from automata import (NFA, DFA, NFAState, postfix_to_nfa, _finalize_nfa_properties,
-                      combine_nfas, construct_unminimized_dfa_from_nfa, _minimize_dfa)
-from lexer_core import Lexer, parse_re_file_data, SymbolTable 
-from regex_utils import infix_to_postfix
-from syntax_tree_direct_dfa import regex_to_direct_dfa 
-from graph_drawer import draw_dfa_to_file
-from ui_formatters import get_nfa_details_str, get_dfa_table_str, get_dfa_anexo_ii_format
+from core.automata import (NFA, DFA, NFAState, postfix_to_nfa, _finalize_nfa_properties,
+                           combine_nfas, construct_unminimized_dfa_from_nfa, _minimize_dfa)
+from core.lexer_core import Lexer, parse_re_file_data, SymbolTable
+from core.regex_utils import infix_to_postfix
+from core.syntax_tree_direct_dfa import regex_to_direct_dfa
+from core.syntactic.grammar import Grammar
+from core.syntactic.slr_generator import SLRGenerator
+from core.syntactic.slr_parser import SLRParser
+
+from .graph_drawer import draw_dfa_to_file
+from .ui_formatters import (get_nfa_details_str, get_dfa_table_str, get_dfa_anexo_ii_format,
+                            get_grammar_details_str, get_first_follow_sets_str,
+                            get_canonical_collection_str, get_slr_table_str, get_parse_steps_str)
 from .ui_utils import update_display_tab, clear_dfa_image
 
 
@@ -39,7 +45,6 @@ def process_regular_expressions_callback(app_instance):
     widgets = app_instance.get_current_mode_widgets()
     if not widgets: return
 
-    # Le expressoes regulares da entrada e as guarda ------------------------------------
     re_content_for_parsing = ""
     if app_instance.current_frame_name != "FullTestMode":
         re_input_tb = widgets.get("re_input_textbox")
@@ -51,10 +56,6 @@ def process_regular_expressions_callback(app_instance):
             messagebox.showerror("Entrada Vazia", "Nenhuma definição regular fornecida."); return
         
         try:
-            # Le caixa de ERs e as guarda no dicionario de definicoes.
-            # Ordem é uma lista
-            # Palavras reservadas é um dicionario
-            # Patterns to ignore é um conjunto
             app_instance.definitions, app_instance.pattern_order, app_instance.reserved_words_defs, app_instance.patterns_to_ignore = parse_re_file_data(re_content_for_parsing)
         except Exception as e:
             messagebox.showerror("Erro ao Parsear Definições", f"Erro: {e}")
@@ -68,14 +69,12 @@ def process_regular_expressions_callback(app_instance):
     
     process_successful = False
     import traceback 
-    # Transforma ER em Automato  ------------------------------------
     try:
         if app_instance.active_construction_method == "thompson":
             NFA.reset_state_ids() 
             DFA._next_dfa_id = 0 
             DFA._state_map = {}  
             has_any_valid_nfa = False
-            # Cada definição é transformada em um automato e adiciona lista de automatos individuais
             for name in app_instance.pattern_order:
                 regex_str = app_instance.definitions.get(name, "")
                 if not regex_str: continue
@@ -124,7 +123,6 @@ def process_regular_expressions_callback(app_instance):
                 followpos_nfa_union_tab_content.append("AFD Direto Consolidado (Não-Minimizado): Falha na geração.")
 
             update_display_tab(widgets, "NFA Combinado (União ε) / AFD Direto (Não-Minim.)", "\n".join(followpos_nfa_union_tab_content))
-
 
             if direct_dfa and aug_tree and pos_map:
                 app_instance.unminimized_dfa = direct_dfa 
@@ -306,7 +304,6 @@ def draw_current_minimized_dfa_callback(app_instance):
             new_width = max(1, int(new_width)) 
             new_height = max(1, int(new_height)) 
 
-
             resized_image = pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
             ctk_image = ctk.CTkImage(light_image=resized_image, dark_image=resized_image, size=(resized_image.width, resized_image.height))
             
@@ -355,6 +352,76 @@ def save_dfa_to_file_callback(app_instance):
             messagebox.showinfo("Sucesso", "Tabela AFD Minimizada (Anexo II) e versões legíveis salvas.")
         except Exception as e: messagebox.showerror("Erro Salvar AFD", str(e))
 
+def process_grammar_callback(app_instance):
+    widgets = app_instance.syntactic_mode_widgets
+    grammar_text = widgets["grammar_input"].get("1.0", "end-1c")
+    if not grammar_text.strip():
+        messagebox.showerror("Erro", "A definição da gramática está vazia.")
+        return
+    
+    try:
+        app_instance.grammar = Grammar.from_text(grammar_text)
+        update_display_tab(widgets, "Detalhes da Gramática", get_grammar_details_str(app_instance.grammar))
+
+        generator = SLRGenerator(app_instance.grammar)
+        
+        firsts = generator.compute_first_sets()
+        follows = generator.compute_follow_sets()
+        update_display_tab(widgets, "Conjuntos First & Follow", get_first_follow_sets_str(firsts, follows))
+
+        collection, _ = generator.build_canonical_collection()
+        update_display_tab(widgets, "Coleção Canônica LR(0)", get_canonical_collection_str(collection))
+        
+        action_table, goto_table = generator.build_slr_table()
+        app_instance.slr_action_table = action_table
+        app_instance.slr_goto_table = goto_table
+        update_display_tab(widgets, "Tabela de Análise SLR", get_slr_table_str(action_table, goto_table, app_instance.grammar))
+
+        widgets["parse_button"].configure(state="normal")
+        widgets["display_tab_view"].set("Tabela de Análise SLR")
+        messagebox.showinfo("Sucesso", "Gramática processada e Tabela SLR gerada com sucesso.")
+
+    except Exception as e:
+        messagebox.showerror("Erro ao Processar Gramática", str(e))
+        widgets["parse_button"].configure(state="disabled")
+
+
+def run_parser_callback(app_instance):
+    widgets = app_instance.syntactic_mode_widgets
+    if not app_instance.grammar or not app_instance.slr_action_table:
+        messagebox.showerror("Erro", "Gramática não processada ou tabela SLR não gerada.")
+        return
+
+    token_stream_text = widgets["token_stream_input"].get("1.0", "end-1c").strip()
+    if not token_stream_text:
+        messagebox.showerror("Erro", "Sequência de tokens de entrada está vazia.")
+        return
+    
+    token_stream = []
+    try:
+        for line in token_stream_text.splitlines():
+            parts = line.strip().split(',')
+            token_type = parts[0]
+            attribute = parts[1] if len(parts) > 1 and parts[1] else None
+            token_stream.append( ('', token_type, attribute) )
+    except IndexError:
+        messagebox.showerror("Erro de Formato", f"Linha de token mal formada: '{line}'. Use o formato 'TIPO,ATRIBUTO'.")
+        return
+
+    try:
+        parser = SLRParser(app_instance.grammar, app_instance.slr_action_table, app_instance.slr_goto_table)
+        steps, success, message = parser.parse(token_stream)
+        
+        update_display_tab(widgets, "Passos da Análise", get_parse_steps_str(steps, success, message))
+        widgets["display_tab_view"].set("Passos da Análise")
+        
+        if success:
+            messagebox.showinfo("Análise Concluída", message)
+        else:
+            messagebox.showerror("Análise Concluída", message)
+
+    except Exception as e:
+        messagebox.showerror("Erro na Análise Sintática", str(e))
 
 def tokenize_source_callback(app_instance):
     widgets = app_instance.get_current_mode_widgets()
@@ -388,13 +455,13 @@ def tokenize_source_callback(app_instance):
         else:
             for lexema, token_type, attribute in tokens_data_list:
                 if token_type == "ERRO!":
-                    output_lines.append(f"<{lexema}, {token_type}>")
-                elif token_type == "ID": # Verifica se o tipo é ID
-                    output_lines.append(f"<{lexema}, {token_type}>") # Exibe <lexema, ID>
-                elif isinstance(attribute, (int, float)): # Para NUM tokens
-                     output_lines.append(f"<{lexema}, {token_type}> (Valor: {attribute})")
-                else: # Para palavras reservadas e outros literais
-                    output_lines.append(f"<{lexema}, {token_type}>")
+                    output_lines.append(f"<'{lexema}', {token_type}>")
+                elif token_type == "ID":
+                    output_lines.append(f"<'{lexema}', {token_type}> (Atributo: índice {attribute})")
+                elif isinstance(attribute, (int, float)):
+                     output_lines.append(f"<'{lexema}', {token_type}> (Atributo: valor {attribute})")
+                else:
+                    output_lines.append(f"<'{lexema}', {token_type}> (Atributo: {attribute if attribute else 'N/A'})")
 
         update_display_tab(widgets, "Saída do Analisador Léxico (Tokens)", "\n".join(output_lines))
         

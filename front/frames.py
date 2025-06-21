@@ -46,6 +46,16 @@ def create_start_screen_frame(app_instance):
     exit_button = ctk.CTkButton(bottom_frame, text="Sair", command=app_instance.quit, width=120, font=app_instance.font_small_button, fg_color="transparent", border_width=1, border_color=("gray70", "gray30"), hover_color=("gray85", "gray20"))
     exit_button.pack()
 
+    syntactic_button = ctk.CTkButton(buttons_frame, text="🧩 Gerador de Analisador Sintático (SLR)",
+                                  command=lambda: app_instance.show_frame("SyntacticMode"),
+                                  height=60, font=app_instance.font_button, fg_color="#1F6AA5")
+    syntactic_button.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
+
+    full_auto_button = ctk.CTkButton(buttons_frame, text="🚀 Modo Teste Completo (Lexer)",
+                                command=lambda: app_instance.show_frame("FullTestMode"),
+                                height=60, font=app_instance.font_button)
+    full_auto_button.grid(row=2, column=0, columnspan=2, padx=10, pady=10, sticky="ew") 
+
 def create_manual_mode_frame_widgets(app_instance):
     frame = ctk.CTkFrame(app_instance.container)
     app_instance.frames["ManualMode"] = frame
@@ -71,6 +81,72 @@ def create_auto_test_mode_frame_widgets(app_instance):
         btn.pack(pady=3, fill="x")
     if back_button_ref: back_button_ref.pack(pady=(20,10), padx=10, fill="x")
 
+def create_syntactic_mode_frame_widgets(app_instance):
+    frame = ctk.CTkFrame(app_instance.container)
+    app_instance.frames["SyntacticMode"] = frame
+    widgets = {}
+
+    frame.grid_columnconfigure(0, weight=1, minsize=420) 
+    frame.grid_columnconfigure(1, weight=3)             
+    frame.grid_rowconfigure(0, weight=1)
+
+    control_frame = ctk.CTkScrollableFrame(frame, label_text="Controles do Analisador Sintático")
+    control_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+    widgets["control_frame"] = control_frame
+
+    # --- Entradas ---
+    ctk.CTkLabel(control_frame, text="1. Definição da Gramática Livre de Contexto:", font=("Arial", 13, "bold")).pack(pady=(10,2), padx=10, anchor="w")
+    grammar_input = ctk.CTkTextbox(control_frame, height=250, font=("Consolas", 11))
+    grammar_input.insert("1.0", "# Insira a gramática aqui (Ex: E ::= E + T)\n# O símbolo inicial é o do lado esquerdo da primeira produção.\n# Use '&' para épsilon.\nE ::= E + T\nE ::= T\nT ::= T * F\nT ::= F\nF ::= ( E )\nF ::= id")
+    grammar_input.pack(pady=2, padx=10, fill="x")
+    widgets["grammar_input"] = grammar_input
+
+    ctk.CTkLabel(control_frame, text="2. Palavras Reservadas (opcional, uma por linha):", font=("Arial", 13, "bold")).pack(pady=(10,2), padx=10, anchor="w")
+    reserved_words_input = ctk.CTkTextbox(control_frame, height=80, font=("Consolas", 11))
+    reserved_words_input.pack(pady=2, padx=10, fill="x")
+    widgets["reserved_words_input"] = reserved_words_input
+    
+    ctk.CTkLabel(control_frame, text="3. Sequência de Tokens de Entrada (um por linha, formato: TIPO,ATRIBUTO):", font=("Arial", 13, "bold")).pack(pady=(10,2), padx=10, anchor="w")
+    token_stream_input = ctk.CTkTextbox(control_frame, height=150, font=("Consolas", 11))
+    token_stream_input.insert("1.0", "id,0\n+,\nid,1\n*,\nid,2")
+    token_stream_input.pack(pady=2, padx=10, fill="x")
+    widgets["token_stream_input"] = token_stream_input
+
+    # --- Botões de Ação ---
+    process_grammar_button = ctk.CTkButton(control_frame, text="A. Processar Gramática (Gerar Tabela SLR)", command=app_instance.process_grammar)
+    process_grammar_button.pack(pady=(15, 5), padx=10, fill="x")
+    widgets["process_grammar_button"] = process_grammar_button
+    
+    parse_button = ctk.CTkButton(control_frame, text="B. Analisar Sequência de Tokens", command=app_instance.run_syntactic_analysis, state="disabled")
+    parse_button.pack(pady=5, padx=10, fill="x")
+    widgets["parse_button"] = parse_button
+    
+    back_button = ctk.CTkButton(control_frame, text="Voltar à Tela Inicial", command=lambda: app_instance.show_frame("StartScreen"))
+    back_button.pack(pady=(20,10), padx=10, fill="x")
+    
+    # --- Painel de Exibição ---
+    display_tab_view = ctk.CTkTabview(frame) 
+    display_tab_view.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+    widgets["display_tab_view"] = display_tab_view
+    
+    tab_names = [
+        "Detalhes da Gramática", 
+        "Conjuntos First & Follow",
+        "Coleção Canônica LR(0)",
+        "Tabela de Análise SLR",
+        "Passos da Análise"
+    ]
+    textboxes_map = {} 
+    for name in tab_names:
+        tab = display_tab_view.add(name)
+        textbox = ctk.CTkTextbox(tab, wrap="none", font=("Consolas", 10), state="disabled")
+        textbox.pack(expand=True, fill="both", padx=5, pady=5)
+        textboxes_map[name] = textbox
+    
+    widgets["textboxes_map"] = textboxes_map
+    display_tab_view.set(tab_names[0])
+    
+    app_instance.syntactic_mode_widgets = widgets
 
 def create_full_test_mode_frame_widgets(app_instance):
     frame = ctk.CTkFrame(app_instance.container)

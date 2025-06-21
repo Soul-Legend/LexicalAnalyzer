@@ -1,7 +1,7 @@
-from automata import DFA
-from config import EPSILON, CONCAT_OP
-from regex_utils import precedence, is_literal_char as is_simple_literal_char, preprocess_regex, infix_to_postfix
-from automata import postfix_to_nfa, NFA, combine_nfas as thompson_combine_nfas, _finalize_nfa_properties
+from .automata import DFA
+from .config import EPSILON, CONCAT_OP
+from .regex_utils import precedence, is_literal_char as is_simple_literal_char, preprocess_regex, infix_to_postfix
+from .automata import postfix_to_nfa, NFA, combine_nfas as thompson_combine_nfas, _finalize_nfa_properties
 
 
 LITERAL_NODE = 'literal'
