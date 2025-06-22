@@ -1,4 +1,3 @@
-# front/syntactic/grammar.py
 import re
 
 class Production:
@@ -8,7 +7,8 @@ class Production:
         self.number = number
 
     def __repr__(self):
-        return f"({self.number}) {self.head} ::= {' '.join(self.body)}"
+        body_str = ' '.join(self.body) if self.body else '&'
+        return f"({self.number}) {self.head} ::= {body_str}"
     
     def __eq__(self, other):
         return isinstance(other, Production) and self.number == other.number
@@ -34,7 +34,6 @@ class Grammar:
         if not lines:
             raise ValueError("Grammar text is empty or only contains comments.")
 
-        # Primeiro passo: identificar todos os não-terminais (LHS)
         for line in lines:
             if '::=' not in line:
                 raise ValueError(f"Malformed production (missing '::='): {line}")
@@ -44,32 +43,35 @@ class Grammar:
         if not grammar.non_terminals:
              raise ValueError("No non-terminals found in grammar.")
 
-        # Assumir que o primeiro não-terminal definido é o símbolo inicial
         first_head, _ = lines[0].split('::=', 1)
         grammar.start_symbol = first_head.strip()
         grammar.augmented_start_symbol = f"{grammar.start_symbol}'"
         while grammar.augmented_start_symbol in grammar.non_terminals:
             grammar.augmented_start_symbol += "'"
 
-        # Adiciona a produção aumentada
         grammar.non_terminals.add(grammar.augmented_start_symbol)
         aug_prod = Production(grammar.augmented_start_symbol, [grammar.start_symbol], 0)
         grammar.productions.append(aug_prod)
 
-        # Segundo passo: processar produções e identificar terminais
         prod_num = 1
         for line in lines:
             head, body_str = line.split('::=', 1)
             head = head.strip()
             
-            body_symbols = [s for s in body_str.strip().split(' ') if s]
+            body_symbols_raw = [s for s in body_str.strip().split(' ') if s]
             
+            # CORREÇÃO: Tratar épsilon como corpo vazio
+            if body_symbols_raw == [grammar.epsilon_symbol]:
+                body_symbols = []
+            else:
+                body_symbols = body_symbols_raw
+
             production = Production(head, body_symbols, prod_num)
             grammar.productions.append(production)
             prod_num += 1
 
             for symbol in body_symbols:
-                if symbol not in grammar.non_terminals and symbol != grammar.epsilon_symbol:
+                if symbol not in grammar.non_terminals:
                     grammar.terminals.add(symbol)
         
         return grammar

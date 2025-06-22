@@ -18,7 +18,6 @@ from .ui_formatters import (get_nfa_details_str, get_dfa_table_str, get_dfa_anex
                             get_canonical_collection_str, get_slr_table_str, get_parse_steps_str)
 from .ui_utils import update_display_tab, clear_dfa_image
 
-
 def load_re_from_file_for_current_mode_callback(app_instance):
     widgets = app_instance.get_current_mode_widgets()
     if not widgets: return
@@ -393,21 +392,19 @@ def run_parser_callback(app_instance):
         return
 
     token_stream_text = widgets["token_stream_input"].get("1.0", "end-1c").strip()
-    if not token_stream_text:
-        messagebox.showerror("Erro", "Sequência de tokens de entrada está vazia.")
-        return
     
     token_stream = []
-    try:
-        for line in token_stream_text.splitlines():
-            parts = line.strip().split(',')
-            token_type = parts[0]
-            attribute = parts[1] if len(parts) > 1 and parts[1] else None
-            token_stream.append( ('', token_type, attribute) )
-    except IndexError:
-        messagebox.showerror("Erro de Formato", f"Linha de token mal formada: '{line}'. Use o formato 'TIPO,ATRIBUTO'.")
-        return
-
+    if token_stream_text:
+        try:
+            for line in token_stream_text.splitlines():
+                parts = line.strip().split(',')
+                token_type = parts[0]
+                attribute = parts[1] if len(parts) > 1 and parts[1] else None
+                token_stream.append( ('', token_type, attribute) )
+        except IndexError:
+            messagebox.showerror("Erro de Formato", f"Linha de token mal formada: '{line}'. Use o formato 'TIPO,ATRIBUTO'.")
+            return
+    
     try:
         parser = SLRParser(app_instance.grammar, app_instance.slr_action_table, app_instance.slr_goto_table)
         steps, success, message = parser.parse(token_stream)

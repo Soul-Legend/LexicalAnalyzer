@@ -14,9 +14,9 @@ class SLRGenerator:
         self.first_sets = {nt: set() for nt in self.grammar.non_terminals}
         for t in self.grammar.terminals:
             self.first_sets[t] = {t}
-        if self.grammar.epsilon_symbol:
-            self.first_sets[self.grammar.epsilon_symbol] = {self.grammar.epsilon_symbol}
-
+        # CORREÇÃO: Não adicionar épsilon como um símbolo com seu próprio First set
+        # Ele é apenas um marcador.
+        
         changed = True
         while changed:
             changed = False
@@ -37,7 +37,11 @@ class SLRGenerator:
         
         result = set()
         for symbol in sequence:
-            symbol_first = self.first_sets.get(symbol, {symbol})
+            # Garante que o first do símbolo foi inicializado se for um terminal
+            if symbol not in self.first_sets:
+                self.first_sets[symbol] = {symbol}
+            
+            symbol_first = self.first_sets.get(symbol)
             result.update(symbol_first - {self.grammar.epsilon_symbol})
             if self.grammar.epsilon_symbol not in symbol_first:
                 return result
@@ -142,25 +146,25 @@ class SLRGenerator:
                 if dot_pos == len(prod.body):
                     if prod.head == self.grammar.augmented_start_symbol:
                         if '$' in self.action_table[i]:
-                             raise ValueError(f"Conflict in state {i} on '$' (accept)")
+                             raise ValueError(f"Conflict in state {i} on '$' (accept/shift)")
                         self.action_table[i]['$'] = ('accept', prod.number)
                     else:
                         for term in self.follow_sets.get(prod.head, []):
                             if term in self.action_table[i]:
                                 existing_action = self.action_table[i][term]
-                                raise ValueError(f"Conflict in state {i} on '{term}': existing {existing_action}, new ('reduce', {prod.number})")
+                                raise ValueError(f"Conflict in state {i} on '{term}': existing {existing_action[0]}, new reduce")
                             self.action_table[i][term] = ('reduce', prod.number)
 
             for symbol in self.grammar.terminals:
                  if (i, symbol) in self.goto_map:
                     j = self.goto_map[(i, symbol)]
                     if symbol in self.action_table[i]:
-                        raise ValueError(f"Shift/Reduce conflict in state {i} on symbol '{symbol}'")
+                        existing_action = self.action_table[i][symbol]
+                        raise ValueError(f"Shift/Reduce conflict in state {i} on symbol '{symbol}', existing {existing_action}")
                     self.action_table[i][symbol] = ('shift', j)
 
             for symbol in self.grammar.non_terminals:
                  if (i, symbol) in self.goto_map:
-                    j = self.goto_map[(i, symbol)]
-                    self.goto_table[i][symbol] = j
+                    self.goto_table[i][symbol] = self.goto_map[(i, symbol)]
 
         return self.action_table, self.goto_table
