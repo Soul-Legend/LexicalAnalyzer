@@ -58,21 +58,31 @@ class SLRGenerator:
         while changed:
             changed = False
             for p in self.grammar.productions:
-                trailer = set(self.follow_sets.get(p.head, set()))
-                
-                for i in range(len(p.body) - 1, -1, -1):
-                    symbol = p.body[i]
-                    if symbol in self.grammar.non_terminals:
-                        original_follow_set_size = len(self.follow_sets[symbol])
-                        self.follow_sets[symbol].update(trailer)
-                        if len(self.follow_sets[symbol]) != original_follow_set_size:
+                # Regra 2: Para produções A -> αBβ, Follow(B) contém First(β) - {ε}
+                for i in range(len(p.body)):
+                    B = p.body[i]
+                    if B in self.grammar.non_terminals:
+                        beta = p.body[i+1:]
+                        first_of_beta = self._compute_first_for_sequence(beta)
+                        
+                        original_size = len(self.follow_sets[B])
+                        self.follow_sets[B].update(first_of_beta - {self.grammar.epsilon_symbol})
+                        if len(self.follow_sets[B]) != original_size:
                             changed = True
-                    
-                    beta_first = self._compute_first_for_sequence(p.body[i:i+1])
-                    if self.grammar.epsilon_symbol in beta_first:
-                        trailer.update(beta_first - {self.grammar.epsilon_symbol})
-                    else:
-                        trailer = beta_first
+
+                # Regra 3: Para produções A -> αB ou A -> αBβ onde First(β) contém ε,
+                # Follow(B) contém Follow(A)
+                for i in range(len(p.body)):
+                    B = p.body[i]
+                    if B in self.grammar.non_terminals:
+                        beta = p.body[i+1:]
+                        first_of_beta = self._compute_first_for_sequence(beta)
+
+                        if self.grammar.epsilon_symbol in first_of_beta:
+                            original_size = len(self.follow_sets[B])
+                            self.follow_sets[B].update(self.follow_sets.get(p.head, set()))
+                            if len(self.follow_sets[B]) != original_size:
+                                changed = True
         return self.follow_sets
 
     def lr0_closure(self, items):

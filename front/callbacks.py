@@ -2,6 +2,7 @@ from tkinter import filedialog, messagebox
 import os
 from PIL import Image
 import customtkinter as ctk
+import traceback
 
 from core.automata import (NFA, DFA, NFAState, postfix_to_nfa, _finalize_nfa_properties,
                            combine_nfas, construct_unminimized_dfa_from_nfa, _minimize_dfa)
@@ -17,6 +18,7 @@ from .ui_formatters import (get_nfa_details_str, get_dfa_table_str, get_dfa_anex
                             get_grammar_details_str, get_first_follow_sets_str,
                             get_canonical_collection_str, get_slr_table_str, get_parse_steps_str)
 from .ui_utils import update_display_tab, clear_dfa_image
+
 
 def load_re_from_file_for_current_mode_callback(app_instance):
     widgets = app_instance.get_current_mode_widgets()
@@ -67,7 +69,7 @@ def process_regular_expressions_callback(app_instance):
     construction_details_builder.append("\n")
     
     process_successful = False
-    import traceback 
+    
     try:
         if app_instance.active_construction_method == "thompson":
             NFA.reset_state_ids() 
@@ -170,8 +172,7 @@ def combine_all_nfas_callback(app_instance):
     
     nfas_for_combination = {k: v for k,v in app_instance.individual_nfas.items() if v is not None}
     if not nfas_for_combination: messagebox.showerror("Sem NFAs Válidos", "Nenhum NFA individual válido para combinar."); return
-
-    import traceback 
+    
     try:
         DFA._next_dfa_id = 0 
         DFA._state_map = {}
@@ -209,8 +210,7 @@ def generate_final_dfa_and_minimize_callback(app_instance):
 
     app_instance.dfa = None 
     dfa_tables_display_builder = []
-    import traceback 
-
+    
     try:
         if not app_instance.unminimized_dfa:
             if app_instance.current_frame_name != "FullTestMode": 
@@ -259,7 +259,6 @@ def draw_current_minimized_dfa_callback(app_instance):
     if not test_name_slug: test_name_slug = "default_test" 
     filename_prefix = f"dfa_graph_{test_name_slug}"
     
-    import traceback 
     try:
         image_path = draw_dfa_to_file(app_instance.dfa, filename_prefix=filename_prefix, output_subdir=app_instance.images_output_dir, view=False)
         
@@ -381,9 +380,9 @@ def process_grammar_callback(app_instance):
         messagebox.showinfo("Sucesso", "Gramática processada e Tabela SLR gerada com sucesso.")
 
     except Exception as e:
-        messagebox.showerror("Erro ao Processar Gramática", str(e))
+        tb_str = traceback.format_exc()
+        messagebox.showerror("Erro ao Processar Gramática", f"Ocorreu um erro: {e}\n\nTraceback:\n{tb_str}")
         widgets["parse_button"].configure(state="disabled")
-
 
 def run_parser_callback(app_instance):
     widgets = app_instance.syntactic_mode_widgets
@@ -396,13 +395,27 @@ def run_parser_callback(app_instance):
     token_stream = []
     if token_stream_text:
         try:
-            for line in token_stream_text.splitlines():
-                parts = line.strip().split(',')
-                token_type = parts[0]
-                attribute = parts[1] if len(parts) > 1 and parts[1] else None
+            for line_num, line in enumerate(token_stream_text.splitlines()):
+                line = line.strip()
+                if not line: continue
+                
+                token_type = ""
+                attribute = None
+                
+                if line == ',':
+                    token_type = ','
+                else:
+                    parts = line.split(',', 1)
+                    token_type = parts[0].strip()
+                    if len(parts) > 1:
+                        attribute = parts[1].strip()
+
+                if not token_type:
+                    raise ValueError(f"Tipo de token vazio na linha {line_num + 1}")
+                
                 token_stream.append( ('', token_type, attribute) )
-        except IndexError:
-            messagebox.showerror("Erro de Formato", f"Linha de token mal formada: '{line}'. Use o formato 'TIPO,ATRIBUTO'.")
+        except Exception as e:
+            messagebox.showerror("Erro de Formato de Token", f"Linha mal formada: '{line}'.\nUse o formato 'TIPO' ou 'TIPO,ATRIBUTO'.\nDetalhes: {e}")
             return
     
     try:
@@ -418,7 +431,8 @@ def run_parser_callback(app_instance):
             messagebox.showerror("Análise Concluída", message)
 
     except Exception as e:
-        messagebox.showerror("Erro na Análise Sintática", str(e))
+        tb_str = traceback.format_exc()
+        messagebox.showerror("Erro na Análise Sintática", f"{e}\n\n{tb_str}")
 
 def tokenize_source_callback(app_instance):
     widgets = app_instance.get_current_mode_widgets()
@@ -436,13 +450,11 @@ def tokenize_source_callback(app_instance):
         source_code_tb = widgets.get("source_code_input_textbox")
         if source_code_tb: source_code = source_code_tb.get("1.0", "end-1c")
 
-
     if not source_code: 
         update_display_tab(widgets, "Saída do Analisador Léxico (Tokens)", "(Nenhum texto fonte)"); 
         update_display_tab(widgets, "Tabela de Símbolos (Definições & Dinâmica)", "Tabela de Símbolos (Dinâmica):\n(Nenhum texto fonte para analisar)")
         return
     
-    import traceback 
     try:
         tokens_data_list, populated_symbol_table = app_instance.lexer.tokenize(source_code)
         
