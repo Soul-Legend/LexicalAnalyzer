@@ -30,11 +30,17 @@ class Grammar:
         grammar = Grammar()
         grammar.epsilon_symbol = epsilon_symbol
         
-        lines = [line.strip() for line in grammar_text.splitlines() if line.strip() and not line.strip().startswith('#')]
-        if not lines:
+        processed_lines = []
+        raw_lines = grammar_text.splitlines()
+        for line in raw_lines:
+            line_without_comment = line.split('//')[0].strip()
+            if line_without_comment and not line_without_comment.startswith('#'):
+                processed_lines.append(line_without_comment)
+
+        if not processed_lines:
             raise ValueError("Grammar text is empty or only contains comments.")
 
-        for line in lines:
+        for line in processed_lines:
             if '::=' not in line:
                 raise ValueError(f"Malformed production (missing '::='): {line}")
             head, _ = line.split('::=', 1)
@@ -43,7 +49,7 @@ class Grammar:
         if not grammar.non_terminals:
              raise ValueError("No non-terminals found in grammar.")
 
-        first_head, _ = lines[0].split('::=', 1)
+        first_head, _ = processed_lines[0].split('::=', 1)
         grammar.start_symbol = first_head.strip()
         grammar.augmented_start_symbol = f"{grammar.start_symbol}'"
         while grammar.augmented_start_symbol in grammar.non_terminals:
@@ -54,11 +60,10 @@ class Grammar:
         grammar.productions.append(aug_prod)
 
         prod_num = 1
-        for line in lines:
+        for line in processed_lines:
             head, body_str = line.split('::=', 1)
             head = head.strip()
             
-            # CORREÇÃO: Tratar o metacaractere '|' para criar múltiplas produções
             alternative_bodies = [b.strip() for b in body_str.split('|')]
             
             for single_body_str in alternative_bodies:
