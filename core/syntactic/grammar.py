@@ -58,21 +58,24 @@ class Grammar:
             head, body_str = line.split('::=', 1)
             head = head.strip()
             
-            body_symbols_raw = [s for s in body_str.strip().split(' ') if s]
+            # CORREÇÃO: Tratar o metacaractere '|' para criar múltiplas produções
+            alternative_bodies = [b.strip() for b in body_str.split('|')]
             
-            # CORREÇÃO: Tratar épsilon como corpo vazio
-            if body_symbols_raw == [grammar.epsilon_symbol]:
-                body_symbols = []
-            else:
-                body_symbols = body_symbols_raw
+            for single_body_str in alternative_bodies:
+                body_symbols_raw = [s for s in single_body_str.strip().split(' ') if s]
+                
+                if body_symbols_raw == [grammar.epsilon_symbol] or not body_symbols_raw:
+                    body_symbols = []
+                else:
+                    body_symbols = body_symbols_raw
 
-            production = Production(head, body_symbols, prod_num)
-            grammar.productions.append(production)
-            prod_num += 1
+                production = Production(head, body_symbols, prod_num)
+                grammar.productions.append(production)
+                prod_num += 1
 
-            for symbol in body_symbols:
-                if symbol not in grammar.non_terminals:
-                    grammar.terminals.add(symbol)
+                for symbol in body_symbols:
+                    if symbol not in grammar.non_terminals:
+                        grammar.terminals.add(symbol)
         
         return grammar
 
