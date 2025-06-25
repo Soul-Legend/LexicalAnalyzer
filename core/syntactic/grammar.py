@@ -67,8 +67,14 @@ class Grammar:
             alternative_bodies = [b.strip() for b in body_str.split('|')]
             
             for single_body_str in alternative_bodies:
-                body_symbols_raw = [s for s in single_body_str.strip().split(' ') if s]
+                special_symbols = ['*', '+', '(', ')', ';', '=', '&']
                 
+                spaced_body_str = single_body_str
+                for symbol in special_symbols:
+                    spaced_body_str = spaced_body_str.replace(symbol, f' {symbol} ')
+                
+                body_symbols_raw = [s for s in spaced_body_str.strip().split(' ') if s]
+
                 if body_symbols_raw == [grammar.epsilon_symbol] or not body_symbols_raw:
                     body_symbols = []
                 else:
