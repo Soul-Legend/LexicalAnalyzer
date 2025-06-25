@@ -112,5 +112,45 @@ SYNTACTIC_TEST_CASES = [
             "T ::= id"
         ),
         "token_stream": "id,0\n+,\nid,1\n+,\nid,2"
+    },
+     {
+        "name": "Falha 14: Conflito Shift/Reduce (Dangling Else)",
+        "grammar": (
+            "# ERRO ESPERADO: Esta gramática é ambígua e não é SLR(1).\n"
+            "# O parser encontrará um conflito SHIFT/REDUCE.\n"
+            "# O problema ocorre quando o parser vê um 'else' e não sabe se ele\n"
+            "# pertence ao 'if' mais interno (shift) ou se deve reduzir o 'if'\n"
+            "# mais externo que não tem 'else' (reduce).\n"
+            "S ::= if E then S else S\n"
+            "S ::= if E then S\n"
+            "S ::= other\n"
+            "E ::= cond"
+        ),
+        "token_stream": "if,\ncond,\nthen,\nif,\ncond,\nthen,\nother,\nelse,\nother"
+    },
+    {
+        "name": "Falha 15: Conflito Reduce/Reduce",
+        "grammar": (
+            "# ERRO ESPERADO: Esta gramática gera um conflito REDUCE/REDUCE.\n"
+            "# Após ver um 'd', o parser não sabe se deve reduzir usando A ::= d\n"
+            "# ou B ::= d, pois o lookahead 'c' pertence tanto a Follow(A) quanto a Follow(B).\n"
+            "S ::= A c\n"
+            "S ::= B c\n"
+            "A ::= d\n"
+            "B ::= d"
+        ),
+        "token_stream": "d,\nc"
+    },
+    {
+        "name": "Falha 16: Erro de Sintaxe na Entrada",
+        "grammar": (
+            "# ERRO ESPERADO: A gramática é SLR(1) e válida, mas a entrada não.\n"
+            "# O parser deve identificar um erro de sintaxe durante a análise.\n"
+            "# A entrada 'id * + id' é inválida pois um operador não pode seguir outro.\n"
+            "E ::= E + T | T\n"
+            "T ::= T * F | F\n"
+            "F ::= ( E ) | id"
+        ),
+        "token_stream": "id,\n*,\n+,\nid"
     }
 ]
