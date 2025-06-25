@@ -491,10 +491,10 @@ def create_integrated_mode_frame_widgets(app_instance):
     re_example_text = """# Exemplo: calculadora simples
 ID: [a-zA-Z_][a-zA-Z0-9_]*
 NUM: [0-9]+
-PLUS: \+
-TIMES: \*
-LPAREN: \(
-RPAREN: \)
+PLUS: \\+
+TIMES: \\*
+LPAREN: \\(
+RPAREN: \\)
 # Apenas espaços são ignorados para este exemplo
 WS: [ ]+ %ignore
 """
