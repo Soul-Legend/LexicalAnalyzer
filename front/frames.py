@@ -488,13 +488,14 @@ def create_integrated_mode_frame_widgets(app_instance):
     re_input = ctk.CTkTextbox(left_panel, font=("Consolas", 11))
     re_input.grid(row=2, column=0, pady=2, padx=10, sticky="nsew")
     widgets["re_input"] = re_input
-    re_example_text = """# Exemplo: calculadora simples
+
+    re_example_text = """# Exemplo: Definições para uma calculadora simples
 ID: [a-zA-Z_][a-zA-Z0-9_]*
 NUM: [0-9]+
-PLUS: \\+
-TIMES: \\*
-LPAREN: \\(
-RPAREN: \\)
+PLUS: \+
+TIMES: \*
+LPAREN: \(
+RPAREN: \)
 # Apenas espaços são ignorados para este exemplo
 WS: [ ]+ %ignore
 """
@@ -506,6 +507,7 @@ WS: [ ]+ %ignore
     source_input = ctk.CTkTextbox(left_panel, font=("Consolas", 11))
     source_input.grid(row=4, column=0, pady=2, padx=10, sticky="nsew")
     widgets["source_input"] = source_input
+    
     source_example_text = """( a + 5 ) * b"""
     source_input.insert("1.0", source_example_text)
     middle_panel = ctk.CTkFrame(frame, fg_color="transparent")
@@ -527,7 +529,7 @@ WS: [ ]+ %ignore
 
     grammar_example_text = """# Gramática para expressões aritméticas.
 # Os terminais (ID, NUM, etc.) devem corresponder
-# aos nomes dos tokens definidos.
+# aos nomes dos tokens definidos na Parte 1.
 E ::= E PLUS T
 E ::= T
 T ::= T TIMES F
@@ -563,6 +565,7 @@ F ::= NUM
         "Tabela de Símbolos",
         "Detalhes da Gramática",
         "First & Follow",
+        "Coleção Canônica" 
     ]
     textboxes_map = {}
     for name in tab_names:

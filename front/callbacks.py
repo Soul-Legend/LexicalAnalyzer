@@ -572,7 +572,8 @@ def run_part2_syntactic_callback(app_instance):
         firsts = generator.compute_first_sets()
         follows = generator.compute_follow_sets()
         update_display_tab(widgets, "First & Follow", get_first_follow_sets_str(firsts, follows))
-        
+        collection, _ = generator.build_canonical_collection()
+        update_display_tab(widgets, "Coleção Canônica", get_canonical_collection_str(collection))
         action_table, goto_table = generator.build_slr_table()
         update_display_tab(widgets, "Tabela de Análise SLR", get_slr_table_str(action_table, goto_table, grammar))
 
