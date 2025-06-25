@@ -133,20 +133,57 @@ def get_first_follow_sets_str(first_sets, follow_sets):
         
     return "\n".join(output)
 
-def get_canonical_collection_str(collection):
+def get_canonical_collection_str(collection, goto_map=None):
     if not collection:
         return "Coleção canônica de itens LR(0) não gerada."
 
-    output = ["--- Coleção Canônica de Itens LR(0) ---"]
+    output = ["--- Coleção Canônica de Itens LR(0) e Gotos ---"]
     for i, item_set in enumerate(collection):
         output.append(f"\nI{i}:")
-        sorted_items = sorted(list(item_set), key=lambda x: (x[0].number, x[1]))
-        for prod, dot_pos in sorted_items:
+        
+        kernel_items = []
+        closure_items = []
+
+        for prod, dot_pos in item_set:
+            if dot_pos > 0 or prod.number == 0:
+                kernel_items.append((prod, dot_pos))
+            else:
+                closure_items.append((prod, dot_pos))
+        
+        kernel_items.sort(key=lambda x: x[0].number)
+        closure_items.sort(key=lambda x: x[0].number)
+        
+        def format_and_add_item(item):
+            prod, dot_pos = item
             body_list = list(prod.body)
             body_list.insert(dot_pos, '•')
-            body_str = ' '.join(body_list)
+            body_str = ' '.join(body_list) if body_list else '•'
             output.append(f"  {prod.head} ::= {body_str}")
+
+        for item in kernel_items:
+            format_and_add_item(item)
+            
+        if kernel_items and closure_items:
+            output.append("  -----------")
+
+        for item in closure_items:
+            format_and_add_item(item)
+
+        if goto_map:
+            transitions = []
+            for (from_state, symbol), to_state in goto_map.items():
+                if from_state == i:
+                    transitions.append((symbol, to_state))
+            
+            if transitions:
+                output.append("\n  Gotos:")
+                transitions.sort(key=lambda x: x[0])
+                for symbol, to_state in transitions:
+                    output.append(f"    {symbol} -> I{to_state}")
+            
     return "\n".join(output)
+
+
 
 def get_slr_table_str(action_table, goto_table, grammar):
     if not action_table and not goto_table:

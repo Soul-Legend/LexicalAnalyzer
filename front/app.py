@@ -334,8 +334,8 @@ class LexerGeneratorApp(ctk.CTk):
             follows = generator.compute_follow_sets()
             update_display_tab(widgets, "Conjuntos First & Follow", get_first_follow_sets_str(firsts, follows))
 
-            collection, _ = generator.build_canonical_collection()
-            update_display_tab(widgets, "Coleção Canônica LR(0)", get_canonical_collection_str(collection))
+            collection, goto_map = generator.build_canonical_collection()
+            update_display_tab(widgets, "Coleção Canônica LR(0)", get_canonical_collection_str(collection, goto_map))
             
             action_table, goto_table = generator.build_slr_table()
             update_display_tab(widgets, "Tabela de Análise SLR", get_slr_table_str(action_table, goto_table, grammar))
@@ -354,7 +354,7 @@ class LexerGeneratorApp(ctk.CTk):
                     attribute = None
                     if len(parts) > 1:
                         attribute = parts[1].strip()
-
+                    
                     if not token_type and clean_line == "":
                         token_type = ","
                     token_stream.append(('', token_type, attribute))

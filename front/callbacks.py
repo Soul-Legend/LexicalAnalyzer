@@ -367,8 +367,8 @@ def process_grammar_callback(app_instance):
         follows = generator.compute_follow_sets()
         update_display_tab(widgets, "Conjuntos First & Follow", get_first_follow_sets_str(firsts, follows))
 
-        collection, _ = generator.build_canonical_collection()
-        update_display_tab(widgets, "Coleção Canônica LR(0)", get_canonical_collection_str(collection))
+        collection, goto_map = generator.build_canonical_collection()
+        update_display_tab(widgets, "Coleção Canônica LR(0)", get_canonical_collection_str(collection, goto_map))
         
         action_table, goto_table = generator.build_slr_table()
         app_instance.slr_action_table = action_table
@@ -572,8 +572,10 @@ def run_part2_syntactic_callback(app_instance):
         firsts = generator.compute_first_sets()
         follows = generator.compute_follow_sets()
         update_display_tab(widgets, "First & Follow", get_first_follow_sets_str(firsts, follows))
-        collection, _ = generator.build_canonical_collection()
-        update_display_tab(widgets, "Coleção Canônica", get_canonical_collection_str(collection))
+        
+        collection, goto_map = generator.build_canonical_collection()
+        update_display_tab(widgets, "Coleção Canônica", get_canonical_collection_str(collection, goto_map))
+
         action_table, goto_table = generator.build_slr_table()
         update_display_tab(widgets, "Tabela de Análise SLR", get_slr_table_str(action_table, goto_table, grammar))
 
