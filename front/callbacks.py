@@ -17,7 +17,7 @@ from .graph_drawer import draw_dfa_to_file
 from .ui_formatters import (get_nfa_details_str, get_dfa_table_str, get_dfa_anexo_ii_format,
                             get_grammar_details_str, get_first_follow_sets_str,
                             get_canonical_collection_str, get_slr_table_str, get_parse_steps_str)
-from .ui_utils import update_display_tab, clear_dfa_image
+from .ui_utils import update_display_tab, clear_dfa_image, update_text_content
 
 
 def load_re_from_file_for_current_mode_callback(app_instance):
@@ -499,3 +499,92 @@ def tokenize_source_callback(app_instance):
         messagebox.showerror("Erro Análise Léxica", error_message)
         update_display_tab(widgets, "Saída do Analisador Léxico (Tokens)", f"Erro: {str(e)}\n{tb_str}")
         update_display_tab(widgets, "Tabela de Símbolos (Definições & Dinâmica)", "Tabela de Símbolos (Dinâmica - Após Análise Léxica):\n(Erro durante a análise)")
+
+def run_part1_lexical_callback(app_instance):
+    widgets = app_instance.get_current_mode_widgets()
+    if not widgets: return
+    
+    re_content = widgets["re_input"].get("1.0", "end-1c").strip()
+    source_code = widgets["source_input"].get("1.0", "end-1c").strip()
+
+    if not re_content or not source_code:
+        messagebox.showerror("Entrada Incompleta", "Forneça as Definições Regulares e o Código Fonte.")
+        return
+
+    try:
+        app_instance.definitions, app_instance.pattern_order, app_instance.reserved_words_defs, app_instance.patterns_to_ignore = parse_re_file_data(re_content)
+        
+        direct_dfa, _, _, _ = regex_to_direct_dfa(app_instance.definitions, app_instance.pattern_order)
+        minimized_dfa = _minimize_dfa(direct_dfa)
+        
+        app_instance.lexer = Lexer(minimized_dfa, app_instance.reserved_words_defs, app_instance.patterns_to_ignore, app_instance.symbol_table_instance)
+        
+        tokens_data_list, populated_symbol_table = app_instance.lexer.tokenize(source_code)
+        app_instance.generated_token_stream = tokens_data_list
+
+        token_output_lines = []
+        lexical_output_lines = [f"Tokens Gerados para '{app_instance.current_test_name}':\n"]
+        for lexema, token_type, attribute in tokens_data_list:
+            token_output_lines.append(f"{token_type},{attribute if attribute is not None else ''}")
+            if token_type == "ERRO!":
+                lexical_output_lines.append(f"<'{lexema}', {token_type}>")
+            elif token_type == "ID":
+                lexical_output_lines.append(f"<'{lexema}', {token_type}> (Atributo: índice {attribute})")
+            else:
+                lexical_output_lines.append(f"<'{lexema}', {token_type}>")
+
+        update_text_content(widgets["token_output_display"], "\n".join(token_output_lines))
+        update_display_tab(widgets, "Saída Léxica (Tokens)", "\n".join(lexical_output_lines))
+        
+        ts_str = "Definições de Padrões (Estático):\n"
+        for name in app_instance.pattern_order:
+            ts_str += f"  - {name}: {app_instance.definitions.get(name)}\n"
+        ts_str += "\n\nTabela de Símbolos (Dinâmica - Após Análise Léxica):\n"
+        ts_str += str(populated_symbol_table)
+        update_display_tab(widgets, "Tabela de Símbolos", ts_str)
+
+        widgets["part2_button"].configure(state="normal")
+        messagebox.showinfo("Parte 1 Concluída", "Tokens gerados com sucesso. Prossiga para a Parte 2.")
+
+    except Exception as e:
+        tb_str = traceback.format_exc()
+        messagebox.showerror("Erro na Análise Léxica", f"Ocorreu um erro: {e}\n\n{tb_str}")
+        widgets["part2_button"].configure(state="disabled")
+
+def run_part2_syntactic_callback(app_instance):
+    widgets = app_instance.get_current_mode_widgets()
+    if not widgets: return
+
+    if not app_instance.generated_token_stream:
+        messagebox.showerror("Processo Incompleto", "Execute a Parte 1 para gerar os tokens primeiro.")
+        return
+
+    grammar_text = widgets["grammar_input"].get("1.0", "end-1c").strip()
+    if not grammar_text:
+        messagebox.showerror("Entrada Incompleta", "Forneça a Gramática Livre de Contexto.")
+        return
+
+    try:
+        grammar = Grammar.from_text(grammar_text)
+        update_display_tab(widgets, "Detalhes da Gramática", get_grammar_details_str(grammar))
+
+        generator = SLRGenerator(grammar)
+        firsts = generator.compute_first_sets()
+        follows = generator.compute_follow_sets()
+        update_display_tab(widgets, "First & Follow", get_first_follow_sets_str(firsts, follows))
+        
+        action_table, goto_table = generator.build_slr_table()
+        update_display_tab(widgets, "Tabela de Análise SLR", get_slr_table_str(action_table, goto_table, grammar))
+
+        parser = SLRParser(grammar, action_table, goto_table)
+        steps, success, message = parser.parse(list(app_instance.generated_token_stream))
+        update_display_tab(widgets, "Passos da Análise", get_parse_steps_str(steps, success, message))
+
+        if success:
+            messagebox.showinfo("Análise Sintática Concluída", message)
+        else:
+            messagebox.showerror("Análise Sintática Concluída", message)
+
+    except Exception as e:
+        tb_str = traceback.format_exc()
+        messagebox.showerror("Erro na Análise Sintática", f"Ocorreu um erro: {e}\n\n{tb_str}")

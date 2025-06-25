@@ -18,32 +18,37 @@ def create_start_screen_frame(app_instance):
     buttons_frame = ctk.CTkFrame(frame, fg_color="transparent")
     buttons_frame.pack(pady=20, padx=60, fill="x") 
     buttons_frame.grid_columnconfigure((0,1), weight=1)
-    buttons_frame.grid_rowconfigure((0,1,2), weight=1) 
+    buttons_frame.grid_rowconfigure((0,1,2,3), weight=1) 
+
+    integrated_button = ctk.CTkButton(buttons_frame, text="⚙️ Modo Integrado (Léxico + Sintático)",
+                                  command=lambda: app_instance.show_frame("IntegratedMode"),
+                                  height=60, font=app_instance.font_button, fg_color="#0B5394")
+    integrated_button.grid(row=0, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
 
     manual_thompson_button = ctk.CTkButton(buttons_frame, text="📝 Gerador de Lexer (Thompson)",
                                   command=lambda: app_instance.show_frame("ManualMode", construction_method="thompson"),
                                   height=60, font=app_instance.font_button)
-    manual_thompson_button.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
+    manual_thompson_button.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
 
     manual_tree_button = ctk.CTkButton(buttons_frame, text="🌳 Gerador de Lexer (Followpos)",
                                   command=lambda: app_instance.show_frame("ManualMode", construction_method="tree_direct_dfa"),
                                   height=60, font=app_instance.font_button)
-    manual_tree_button.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
+    manual_tree_button.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
 
     syntactic_button = ctk.CTkButton(buttons_frame, text="🧩 Gerador de Analisador Sintático (SLR)",
                                   command=lambda: app_instance.show_frame("SyntacticMode"),
                                   height=60, font=app_instance.font_button, fg_color="#1F6AA5")
-    syntactic_button.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
+    syntactic_button.grid(row=2, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
 
     full_auto_button = ctk.CTkButton(buttons_frame, text="🚀 Modo Teste Completo (Lexer)",
                                 command=lambda: app_instance.show_frame("FullTestMode"),
                                 height=60, font=app_instance.font_button)
-    full_auto_button.grid(row=2, column=0, padx=10, pady=10, sticky="ew") 
+    full_auto_button.grid(row=3, column=0, padx=10, pady=10, sticky="ew") 
     
     syntactic_test_button = ctk.CTkButton(buttons_frame, text="✅ Modo Teste Completo (Sintático)",
                                 command=lambda: app_instance.show_frame("SyntacticTestMode"),
                                 height=60, font=app_instance.font_button)
-    syntactic_test_button.grid(row=2, column=1, padx=10, pady=10, sticky="ew")
+    syntactic_test_button.grid(row=3, column=1, padx=10, pady=10, sticky="ew")
 
     bottom_frame = ctk.CTkFrame(frame, fg_color="transparent")
     bottom_frame.pack(side="bottom", pady=(20, max(app_instance.winfo_height() // 10, 40)), padx=20, fill="x")
@@ -274,3 +279,84 @@ def create_syntactic_test_mode_frame_widgets(app_instance):
     if tab_names: right_panel.set(tab_names[0])
     
     app_instance.syntactic_test_mode_widgets = widgets
+
+def create_integrated_mode_frame_widgets(app_instance):
+    frame = ctk.CTkFrame(app_instance.container)
+    app_instance.frames["IntegratedMode"] = frame
+    widgets = {}
+
+    frame.grid_columnconfigure(0, weight=2, minsize=300)
+    frame.grid_columnconfigure(1, weight=2, minsize=300)
+    frame.grid_columnconfigure(2, weight=3)
+    frame.grid_rowconfigure(0, weight=1)
+    frame.grid_rowconfigure(1, weight=0)
+
+    left_panel = ctk.CTkFrame(frame, fg_color="transparent")
+    left_panel.grid(row=0, column=0, padx=(10, 5), pady=10, sticky="nsew")
+    left_panel.grid_rowconfigure(1, weight=1)
+    left_panel.grid_rowconfigure(3, weight=1)
+    ctk.CTkLabel(left_panel, text="Parte 1: Análise Léxica", font=("Arial", 16, "bold")).grid(row=0, column=0, pady=10, padx=10, sticky="w")
+    
+    ctk.CTkLabel(left_panel, text="Definições Regulares:", font=("Arial", 13, "bold")).grid(row=1, column=0, pady=(5,2), padx=10, sticky="sw")
+    re_input = ctk.CTkTextbox(left_panel, font=("Consolas", 11))
+    re_input.grid(row=2, column=0, pady=2, padx=10, sticky="nsew")
+    widgets["re_input"] = re_input
+
+    ctk.CTkLabel(left_panel, text="Código Fonte:", font=("Arial", 13, "bold")).grid(row=3, column=0, pady=(10,2), padx=10, sticky="sw")
+    source_input = ctk.CTkTextbox(left_panel, font=("Consolas", 11))
+    source_input.grid(row=4, column=0, pady=2, padx=10, sticky="nsew")
+    widgets["source_input"] = source_input
+
+    middle_panel = ctk.CTkFrame(frame, fg_color="transparent")
+    middle_panel.grid(row=0, column=1, padx=5, pady=10, sticky="nsew")
+    middle_panel.grid_rowconfigure(1, weight=2)
+    middle_panel.grid_rowconfigure(3, weight=1)
+    ctk.CTkLabel(middle_panel, text="Parte 2: Análise Sintática", font=("Arial", 16, "bold")).grid(row=0, column=0, pady=10, padx=10, sticky="w")
+
+    ctk.CTkLabel(middle_panel, text="Gramática Livre de Contexto:", font=("Arial", 13, "bold")).grid(row=1, column=0, pady=(5,2), padx=10, sticky="sw")
+    grammar_input = ctk.CTkTextbox(middle_panel, font=("Consolas", 11))
+    grammar_input.grid(row=2, column=0, pady=2, padx=10, sticky="nsew")
+    widgets["grammar_input"] = grammar_input
+
+    ctk.CTkLabel(middle_panel, text="Tokens Gerados (Entrada para Parte 2):", font=("Arial", 13, "bold")).grid(row=3, column=0, pady=(10,2), padx=10, sticky="sw")
+    token_output_display = ctk.CTkTextbox(middle_panel, font=("Consolas", 10), state="disabled", fg_color=("gray85", "gray20"))
+    token_output_display.grid(row=4, column=0, pady=2, padx=10, sticky="nsew")
+    widgets["token_output_display"] = token_output_display
+
+    right_panel = ctk.CTkTabview(frame)
+    right_panel.grid(row=0, column=2, padx=(5, 10), pady=10, sticky="nsew")
+    widgets["display_tab_view"] = right_panel
+    
+    tab_names = [
+        "Saída Léxica (Tokens)",
+        "Tabela de Símbolos",
+        "Detalhes da Gramática", 
+        "First & Follow",
+        "Tabela de Análise SLR",
+        "Passos da Análise"
+    ]
+    textboxes_map = {} 
+    for name in tab_names:
+        tab = right_panel.add(name)
+        textbox = ctk.CTkTextbox(tab, wrap="none", font=("Consolas", 10), state="disabled")
+        textbox.pack(expand=True, fill="both", padx=5, pady=5)
+        textboxes_map[name] = textbox
+    widgets["textboxes_map"] = textboxes_map
+
+    button_panel = ctk.CTkFrame(frame, fg_color="transparent")
+    button_panel.grid(row=1, column=0, columnspan=3, pady=10, padx=10, sticky="ew")
+    button_panel.grid_columnconfigure((0, 1, 2), weight=1)
+
+    part1_button = ctk.CTkButton(button_panel, text="► Executar Parte 1 (Gerar Tokens)", command=app_instance.run_part1_lexical)
+    part1_button.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+    widgets["part1_button"] = part1_button
+
+    part2_button = ctk.CTkButton(button_panel, text="►► Executar Parte 2 (Analisar Gramática)", command=app_instance.run_part2_syntactic, state="disabled")
+    part2_button.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+    widgets["part2_button"] = part2_button
+
+    back_button = ctk.CTkButton(button_panel, text="Voltar à Tela Inicial", command=lambda: app_instance.show_frame("StartScreen"))
+    back_button.grid(row=0, column=2, padx=5, pady=5, sticky="ew")
+
+    app_instance.integrated_mode_widgets = widgets
+

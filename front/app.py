@@ -6,7 +6,8 @@ import traceback
 
 from .frames import (create_start_screen_frame, create_manual_mode_frame_widgets, 
                      create_auto_test_mode_frame_widgets, create_full_test_mode_frame_widgets,
-                     create_syntactic_mode_frame_widgets, create_syntactic_test_mode_frame_widgets)
+                     create_syntactic_mode_frame_widgets, create_syntactic_test_mode_frame_widgets,
+                     create_integrated_mode_frame_widgets)
 from .callbacks import (load_re_from_file_for_current_mode_callback, 
                         load_test_data_for_auto_mode_callback,
                         process_regular_expressions_callback, 
@@ -16,7 +17,9 @@ from .callbacks import (load_re_from_file_for_current_mode_callback,
                         save_dfa_to_file_callback, 
                         tokenize_source_callback,
                         process_grammar_callback,
-                        run_parser_callback)
+                        run_parser_callback,
+                        run_part1_lexical_callback,
+                        run_part2_syntactic_callback)
 from .ui_utils import update_display_tab, clear_dfa_image, update_text_content
 from tests import TEST_CASES 
 from syntactic_tests import SYNTACTIC_TEST_CASES
@@ -67,12 +70,14 @@ class LexerGeneratorApp(ctk.CTk):
         self.grammar = None
         self.slr_action_table = None
         self.slr_goto_table = None
+        self.generated_token_stream = []
         
         self.manual_mode_widgets = {}
         self.auto_test_mode_widgets = {}
         self.full_test_mode_widgets = {} 
         self.syntactic_mode_widgets = {}
         self.syntactic_test_mode_widgets = {}
+        self.integrated_mode_widgets = {}
 
         self.container = ctk.CTkFrame(self, fg_color="transparent")
         self.container.pack(side="top", fill="both", expand=True)
@@ -88,6 +93,7 @@ class LexerGeneratorApp(ctk.CTk):
         create_full_test_mode_frame_widgets(self) 
         create_syntactic_mode_frame_widgets(self)
         create_syntactic_test_mode_frame_widgets(self)
+        create_integrated_mode_frame_widgets(self)
 
         self.show_frame("StartScreen")
 
@@ -123,15 +129,15 @@ class LexerGeneratorApp(ctk.CTk):
              self.current_test_name = "Analisador Sintático"
         elif self.current_frame_name == "SyntacticTestMode":
              self.current_test_name = "Teste Sintático Automático"
+        elif self.current_frame_name == "IntegratedMode":
+             self.current_test_name = "Modo Integrado"
         else:
              current_mode_display_name = "Testes Detalhados (Thompson)"
 
-
         self.current_test_name = current_mode_display_name
 
-
         widgets = self.get_current_mode_widgets() 
-        if widgets and self.current_frame_name not in ["FullTestMode", "StartScreen", "SyntacticMode", "SyntacticTestMode"]: 
+        if widgets and self.current_frame_name not in ["FullTestMode", "StartScreen", "SyntacticMode", "SyntacticTestMode", "IntegratedMode"]: 
             is_thompson = (self.active_construction_method == "thompson")
             
             combine_btn = widgets.get("combine_nfas_button")
@@ -149,7 +155,6 @@ class LexerGeneratorApp(ctk.CTk):
             if generate_dfa_btn:
                 generate_dfa_btn.configure(text="C. Minimizar AFD")
 
-
         if frame_name == "AutoTestMode": 
             if widgets and widgets.get("re_input_textbox") and \
                not widgets["re_input_textbox"].get("1.0", "end-1c").strip() and TEST_CASES:
@@ -163,6 +168,7 @@ class LexerGeneratorApp(ctk.CTk):
         elif self.current_frame_name == "FullTestMode": return self.full_test_mode_widgets
         elif self.current_frame_name == "SyntacticMode": return self.syntactic_mode_widgets
         elif self.current_frame_name == "SyntacticTestMode": return self.syntactic_test_mode_widgets
+        elif self.current_frame_name == "IntegratedMode": return self.integrated_mode_widgets
         return None
 
     def _update_widget_text(self, widget_key, content):
@@ -178,7 +184,6 @@ class LexerGeneratorApp(ctk.CTk):
         else:
             pass
 
-
     def _set_re_definitions_for_current_mode(self, content):
         re_textbox_key = "re_input_textbox" 
         if self.current_frame_name == "FullTestMode":
@@ -187,7 +192,6 @@ class LexerGeneratorApp(ctk.CTk):
         
         if self.current_frame_name != "FullTestMode": 
             self.reset_app_state()
-
 
     def _set_source_code_for_current_mode(self, content):
         source_textbox_key = "source_code_input_textbox" 
@@ -209,6 +213,7 @@ class LexerGeneratorApp(ctk.CTk):
         self.grammar = None
         self.slr_action_table = None
         self.slr_goto_table = None
+        self.generated_token_stream = []
 
         widgets = self.get_current_mode_widgets()
         if not widgets: return
@@ -228,6 +233,9 @@ class LexerGeneratorApp(ctk.CTk):
             
             if widgets.get("process_grammar_button"): widgets["process_grammar_button"].configure(state="normal")
             if widgets.get("parse_button"): widgets["parse_button"].configure(state="disabled")
+            
+            if widgets.get("part1_button"): widgets["part1_button"].configure(state="normal")
+            if widgets.get("part2_button"): widgets["part2_button"].configure(state="disabled")
     
     def display_definitions_and_reserved_words(self):
         widgets = self.get_current_mode_widgets()
@@ -272,7 +280,6 @@ class LexerGeneratorApp(ctk.CTk):
 
         update_text_content(current_widgets_for_full_test.get("re_display_textbox"), test_case["re_definitions"], keep_editable=False)
         update_text_content(current_widgets_for_full_test.get("source_display_textbox"), test_case["source_code"], keep_editable=False)
-
 
         try:
             self.definitions, self.pattern_order, self.reserved_words_defs, self.patterns_to_ignore = parse_re_file_data(test_case["re_definitions"])
@@ -365,3 +372,6 @@ class LexerGeneratorApp(ctk.CTk):
 
     def process_grammar(self): process_grammar_callback(self)
     def run_syntactic_analysis(self): run_parser_callback(self)
+    
+    def run_part1_lexical(self): run_part1_lexical_callback(self)
+    def run_part2_syntactic(self): run_part2_syntactic_callback(self)
