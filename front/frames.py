@@ -488,6 +488,17 @@ def create_integrated_mode_frame_widgets(app_instance):
     re_input = ctk.CTkTextbox(left_panel, font=("Consolas", 11))
     re_input.grid(row=2, column=0, pady=2, padx=10, sticky="nsew")
     widgets["re_input"] = re_input
+    re_example_text = """# Exemplo: calculadora simples
+ID: [a-zA-Z_][a-zA-Z0-9_]*
+NUM: [0-9]+
+PLUS: \+
+TIMES: \*
+LPAREN: \(
+RPAREN: \)
+# Apenas espaços são ignorados para este exemplo
+WS: [ ]+ %ignore
+"""
+    re_input.insert("1.0", re_example_text)
 
     ctk.CTkLabel(left_panel, text="Código Fonte:", font=("Arial", 13, "bold")).grid(
         row=3, column=0, pady=(10, 2), padx=10, sticky="w"
@@ -495,7 +506,8 @@ def create_integrated_mode_frame_widgets(app_instance):
     source_input = ctk.CTkTextbox(left_panel, font=("Consolas", 11))
     source_input.grid(row=4, column=0, pady=2, padx=10, sticky="nsew")
     widgets["source_input"] = source_input
-
+    source_example_text = """( a + 5 ) * b"""
+    source_input.insert("1.0", source_example_text)
     middle_panel = ctk.CTkFrame(frame, fg_color="transparent")
     middle_panel.grid(row=0, column=1, padx=5, pady=10, sticky="nsew")
     middle_panel.grid_columnconfigure(0, weight=1)
@@ -512,6 +524,19 @@ def create_integrated_mode_frame_widgets(app_instance):
     grammar_input = ctk.CTkTextbox(middle_panel, font=("Consolas", 11))
     grammar_input.grid(row=2, column=0, pady=2, padx=10, sticky="nsew")
     widgets["grammar_input"] = grammar_input
+
+    grammar_example_text = """# Gramática para expressões aritméticas.
+# Os terminais (ID, NUM, etc.) devem corresponder
+# aos nomes dos tokens definidos.
+E ::= E PLUS T
+E ::= T
+T ::= T TIMES F
+T ::= F
+F ::= LPAREN E RPAREN
+F ::= ID
+F ::= NUM
+"""
+    grammar_input.insert("1.0", grammar_example_text)
 
     ctk.CTkLabel(
         middle_panel,
