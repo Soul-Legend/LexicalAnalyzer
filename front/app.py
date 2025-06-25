@@ -343,10 +343,21 @@ class LexerGeneratorApp(ctk.CTk):
             token_stream = []
             if test_case["token_stream"]:
                 for line in test_case["token_stream"].strip().splitlines():
-                    parts = line.split(',', 1)
+                    clean_line = line.strip()
+                    if not clean_line:
+                        continue
+                    if clean_line.endswith(','):
+                        clean_line = clean_line[:-1]
+
+                    parts = clean_line.split(',', 1)
                     token_type = parts[0].strip()
-                    attribute = parts[1].strip() if len(parts) > 1 else None
-                    token_stream.append( ('', token_type, attribute) )
+                    attribute = None
+                    if len(parts) > 1:
+                        attribute = parts[1].strip()
+
+                    if not token_type and clean_line == "":
+                        token_type = ","
+                    token_stream.append(('', token_type, attribute))
 
             parser = SLRParser(grammar, action_table, goto_table)
             steps, success, message = parser.parse(token_stream)
@@ -355,7 +366,7 @@ class LexerGeneratorApp(ctk.CTk):
             if success:
                 messagebox.showinfo("Teste Concluído", f"Teste '{test_case['name']}' concluído com sucesso.")
             else:
-                messagebox.showwarning("Teste Concluído", f"Teste '{test_case['name']}' concluído com erro de sintaxe, como esperado.")
+                messagebox.showwarning("Teste Concluído", f"Teste '{test_case['name']}' concluído com erro de sintaxe.")
 
         except Exception as e:
             tb_str = traceback.format_exc()
