@@ -148,8 +148,8 @@ def postfix_to_nfa(postfix_tokens_list):
     por epsilon para unir cada um dos automatos gerados em um único automato
     não deterministico que é capaz de reconhecer a linguagem descrita pela ER.
     '''
-    from regex_utils import is_token_literal
-    from config import CONCAT_OP
+    from .regex_utils import is_token_literal
+    from .config import CONCAT_OP
 
     if not postfix_tokens_list: return None
     stack = []

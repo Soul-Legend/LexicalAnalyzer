@@ -66,15 +66,15 @@ def create_start_screen_frame(app_instance):
     )
     manual_tree_button.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
 
-    syntactic_button = ctk.CTkButton(
-        buttons_frame,
-        text="🧩 Gerador de Analisador Sintático (SLR)",
-        command=lambda: app_instance.show_frame("SyntacticMode"),
-        height=60,
-        font=app_instance.font_button,
-        fg_color="#1F6AA5",
-    )
-    syntactic_button.grid(row=2, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
+    # syntactic_button = ctk.CTkButton(
+    #     buttons_frame,
+    #     text="🧩 Gerador de Analisador Sintático (SLR)",
+    #     command=lambda: app_instance.show_frame("SyntacticMode"),
+    #     height=60,
+    #     font=app_instance.font_button,
+    #     fg_color="#1F6AA5",
+    # )
+    # syntactic_button.grid(row=2, column=0, columnspan=2, padx=10, pady=10, sticky="ew")
 
     full_auto_button = ctk.CTkButton(
         buttons_frame,
