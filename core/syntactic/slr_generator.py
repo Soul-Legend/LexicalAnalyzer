@@ -17,18 +17,11 @@ class SLRGenerator:
         # If X is a terminal, then FIRST(X)= {X}.
         for t in self.grammar.terminals:
             self.first_sets[t] = {t}
-        
-        
-        # TODO Estamos calculando first de uma maneira ineficiente, talvez algo
-        # parecido com uma busca em profundidade seja melhor
+
         changed = True
         while changed:
             changed = False
             for p in self.grammar.productions:
-                # TODO Essa checagem me parece um erro, se o simbolo
-                # não está no set de firsts então quer dizer que deixamos passar
-                # uma gramática mal formada, pois já preenchemos o set de firsts
-                # anteriormente
                 if p.head not in self.first_sets: continue
                 
                 original_first_set_size = len(self.first_sets[p.head])
@@ -49,13 +42,6 @@ class SLRGenerator:
         result = set()
         # Itera sobre todos os simbolos da sequencia
         for symbol in sequence:
-            # TODO Essa checagem me parece um erro, se o simbolo
-            # não está no set de firsts então quer dizer que deixamos passar
-            # uma gramática mal formada, pois já preenchemos o set de firsts
-            # anteriormente
-            if symbol not in self.first_sets:
-                self.first_sets[symbol] = {symbol}
-            
             symbol_first = self.first_sets.get(symbol)
             result.update(symbol_first - {self.grammar.epsilon_symbol})
             # Se o simbolo atual não contém epsilon no seu first, retorna
@@ -211,7 +197,6 @@ class SLRGenerator:
             # 2 - (a) If [A -> αa.β] is in Ii and GOTO(Ii,a) = Ij, then set ACTION[i, a] to
             # "shift j." Here a must be a terminal.
             for symbol in self.grammar.terminals:
-                # TODO Me parece que sempre está no map e se não está é um erro
                 if (i, symbol) in self.goto_map:
                     j = self.goto_map[(i, symbol)]
                     if symbol in self.action_table.get(i, {}):
@@ -220,11 +205,6 @@ class SLRGenerator:
                     self.action_table[i][symbol] = ('shift', j)
 
             for symbol in self.grammar.non_terminals:
-                # TODO Possivelmente precisa de algo assim aqui?
-                # O livro não descreve, talvez não precise por que não tem como dar conflito
-                # if symbol in self.goto_table.get(i, {}):
-                #     raise ValueError(f"Conflict in state {i} on non terminal '{symbol}', existing {existing_action}")
-                # TODO Me parece que sempre está no map e se não está é um erro
                 if (i, symbol) in self.goto_map:
                     self.goto_table[i][symbol] = self.goto_map[(i, symbol)]
 
