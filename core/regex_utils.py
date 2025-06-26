@@ -1,8 +1,17 @@
 from .config import EPSILON, CONCAT_OP
 
-REGEX_META_OPERATORS = "*+?|." 
+REGEX_META_OPERATORS = "*+?|."
 REGEX_GROUPING_SYMBOLS = "()"
 ALL_SPECIAL_REGEX_CHARS = REGEX_META_OPERATORS + REGEX_GROUPING_SYMBOLS
+
+COMMON_ESCAPE_SEQUENCES = {
+    'n': '\n',  # Nova linha
+    't': '\t',  # Tabulação
+    'r': '\r',  # Retorno
+    'f': '\f',  # Alimentação de formulário
+    'v': '\v',  # Tabulação vertical
+    '\\': '\\', # Barra invertida literal
+}
 
 def is_literal_char(char_code):
     '''
@@ -31,9 +40,17 @@ def expand_char_class(char_class_str):
     i = 0
     # Itera sobre toda a classe de caracteres
     while i < len(content):
-        # Trata caracter precedido por \ como ele mesmo
-        if content[i] == '\\' and i + 1 < len(content): 
-            expanded_chars.append(content[i:i+2]) 
+        # Trata caracter precedido por \
+        if content[i] == '\\' and i + 1 < len(content):
+            escaped_char = content[i+1]
+            # Verifica se é uma sequência de escape comum (como \n, \t)
+            if escaped_char in COMMON_ESCAPE_SEQUENCES:
+                # Adiciona o caractere real (ex: \n, não a string "\\n")
+                expanded_chars.append(COMMON_ESCAPE_SEQUENCES[escaped_char])
+            # Senão, trata como um metacaracter escapado (ex: \*, \+, \()
+            # que deve ser mantido como uma string de 2 caracteres para a próxima fase.
+            else:
+                expanded_chars.append(content[i:i+2])
             i += 2
             continue
         # A partir classe de caracteres, gera a lista de caracteres
@@ -44,7 +61,7 @@ def expand_char_class(char_class_str):
             start_char_val = content[i]
             end_char_val = content[i+2]
             
-            if len(start_char_val) == 1 and len(end_char_val) == 1: 
+            if len(start_char_val) == 1 and len(end_char_val) == 1:
                 is_alpha_range = start_char_val.isalpha() and end_char_val.isalpha()
                 is_digit_range = start_char_val.isdigit() and end_char_val.isdigit()
 
@@ -56,13 +73,14 @@ def expand_char_class(char_class_str):
                         else:
                             expanded_chars.append(char_to_add)
                     i += 3
-                    continue 
+                    continue
             
-            expanded_chars.append(content[i]) 
+            expanded_chars.append(content[i])
             i += 1
         # Trata caracteres unitarios especiais e comuns
-        else: 
+        else:
             char_to_add = content[i]
+            # Se for um metacaracter, precisa ser escapado para a união
             if char_to_add in ALL_SPECIAL_REGEX_CHARS:
                  expanded_chars.append('\\' + char_to_add)
             else:
@@ -70,11 +88,13 @@ def expand_char_class(char_class_str):
             i += 1
             
     if not expanded_chars:
-        return "" 
-    
+        return ""
+
     if len(expanded_chars) == 1:
+        # Se for um caractere de escape (ex: \n), já é um único caractere
+        # Se for um metacaractere escapado (ex: \+), é uma string de 2 chars
         return expanded_chars[0]
-    
+
     # Retorna nova ER no formato expandido:
     # Ex: Dado a lista [a, b, c], retorna (a|b|c)
     return "(" + "|".join(expanded_chars) + ")"
@@ -96,17 +116,17 @@ def preprocess_regex(regex_str):
         # Ex: '\.' são tratados juntos
         if current_regex[i] == '\\':
             if i + 1 < len(current_regex):
-                processed_re_pass1 += current_regex[i:i+2] 
+                processed_re_pass1 += current_regex[i:i+2]
                 i += 2
             else:
-                processed_re_pass1 += current_regex[i] 
+                processed_re_pass1 += current_regex[i]
                 i += 1
         # Trata conjuntos de caracteres
         # Ex: [a-z]
         elif current_regex[i] == '[':
             try:
                 j = i + 1
-                bracket_level = 1 
+                bracket_level = 1
                 
                 search_idx = i + 1
                 end_bracket_idx = -1
@@ -164,7 +184,7 @@ def preprocess_regex(regex_str):
             def can_end_operand(tk):
                 if len(tk) == 2 and tk.startswith('\\'): return True
                 if len(tk) == 1: return is_literal_char(tk) or tk in (')', '*', '+', '?')
-                return False 
+                return False
 
             # Retorna true se o caracter pode iniciar uma ER
             def can_start_operand(tk):
@@ -178,13 +198,13 @@ def preprocess_regex(regex_str):
     return "".join(final_tokens_with_concat)
 
 
-def is_token_literal(token_str): 
+def is_token_literal(token_str):
     if len(token_str) == 2 and token_str.startswith('\\'):
         return True
     if token_str == EPSILON:
         return True
     if len(token_str) == 1:
-        return is_literal_char(token_str) 
+        return is_literal_char(token_str)
     return False
 
 def infix_to_postfix(infix_expr):
@@ -192,7 +212,7 @@ def infix_to_postfix(infix_expr):
     Pré processa e transforma a ER em sua representação pós fixa
     Ex: [a-c](ab)+c -> (a|b|c).(a.b)+.c -> ab|c|ab.+.c.
     '''
-    if not infix_expr: return [] 
+    if not infix_expr: return []
     
     preprocessed_infix_str = preprocess_regex(infix_expr)
     if not preprocessed_infix_str: return []
@@ -208,17 +228,17 @@ def infix_to_postfix(infix_expr):
                 tokens.append(preprocessed_infix_str[i:i+2])
                 i += 2
             else:
-                tokens.append(char) 
+                tokens.append(char)
                 i += 1
         elif char in ['*', CONCAT_OP, '|', '+', '?', '(', ')']:
             tokens.append(char)
             i += 1
-        else: 
+        else:
             tokens.append(char)
             i += 1
     
     postfix_tokens = []
-    stack = [] 
+    stack = []
 
     for token in tokens:
         # Se for um literal, adiciona a lista que representa
@@ -237,7 +257,7 @@ def infix_to_postfix(infix_expr):
             else:
                 raise ValueError(f"Mismatched parentheses in regex: '{infix_expr}' -> '{preprocessed_infix_str}'")
         # Se for um operador
-        elif token in ['*', CONCAT_OP, '|', '+', '?']: 
+        elif token in ['*', CONCAT_OP, '|', '+', '?']:
             while stack and stack[-1] != '(' and precedence(stack[-1]) >= precedence(token):
                 postfix_tokens.append(stack.pop())
             stack.append(token)
