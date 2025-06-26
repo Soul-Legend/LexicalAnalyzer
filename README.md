@@ -4,7 +4,7 @@ This project provides a generator for lexical and syntactic analyzers, implement
 
 The lexical analysis component accepts token definitions as regular expressions, constructs the corresponding finite automata (NFA and DFA), and uses the optimized DFA to tokenize input source code. It supports two DFA construction methods: Thompson's algorithm and the direct method via followpos computation.
 
-The syntactic analysis component accepts a context-free grammar, computes the necessary sets (First, Follow, LR(0) items), builds an SLR parsing table, and uses it to parse a stream of tokens. An integrated mode connects both phases for a full analysis pipeline.
+The syntactic analysis component accepts a context-free grammar, computes the necessary sets (First, Follow, LR(0) items), builds an SLR parsing table, and uses it to parse a stream of tokens. An integrated mode connects both phases.
 
 ## Features
 
