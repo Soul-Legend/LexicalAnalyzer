@@ -1,27 +1,27 @@
 import customtkinter as ctk
-from tkinter import filedialog, messagebox 
-import os 
-from PIL import Image 
+from tkinter import filedialog, messagebox
+import os
+from PIL import Image
 import traceback
 
-from .frames import (create_start_screen_frame, create_manual_mode_frame_widgets, 
+from .frames import (create_start_screen_frame, create_manual_mode_frame_widgets,
                      create_auto_test_mode_frame_widgets, create_full_test_mode_frame_widgets,
                      create_syntactic_mode_frame_widgets, create_syntactic_test_mode_frame_widgets,
                      create_integrated_mode_frame_widgets)
-from .callbacks import (load_re_from_file_for_current_mode_callback, 
+from .callbacks import (load_re_from_file_for_current_mode_callback,
                         load_test_data_for_auto_mode_callback,
-                        process_regular_expressions_callback, 
+                        process_regular_expressions_callback,
                         combine_all_nfas_callback,
-                        generate_final_dfa_and_minimize_callback, 
+                        generate_final_dfa_and_minimize_callback,
                         draw_current_minimized_dfa_callback,
-                        save_dfa_to_file_callback, 
+                        save_dfa_to_file_callback,
                         tokenize_source_callback,
                         process_grammar_callback,
                         run_parser_callback,
                         run_part1_lexical_callback,
                         run_part2_syntactic_callback)
 from .ui_utils import update_display_tab, clear_dfa_image, update_text_content
-from tests import TEST_CASES 
+from tests import TEST_CASES
 from syntactic_tests import SYNTACTIC_TEST_CASES
 from core.lexer_core import SymbolTable, parse_re_file_data
 from core.syntactic.grammar import Grammar
@@ -35,7 +35,7 @@ class LexerGeneratorApp(ctk.CTk):
         super().__init__()
 
         self.title("T1/T2 Formais: Gerador de Analisadores Léxicos e Sintáticos")
-        self.geometry("1300x850") 
+        self.geometry("1300x850")
         ctk.set_appearance_mode("System")
         ctk.set_default_color_theme("blue")
 
@@ -58,11 +58,11 @@ class LexerGeneratorApp(ctk.CTk):
         self.augmented_syntax_tree_followpos = None
         self.followpos_table_followpos = None
 
-        self.unminimized_dfa = None 
-        self.dfa = None 
+        self.unminimized_dfa = None
+        self.dfa = None
         self.lexer = None
         self.current_test_name = "Manual"
-        self.active_construction_method = "thompson" 
+        self.active_construction_method = "thompson"
         
         self.images_output_dir = "imagens"
         self.symbol_table_instance = SymbolTable()
@@ -74,7 +74,7 @@ class LexerGeneratorApp(ctk.CTk):
         
         self.manual_mode_widgets = {}
         self.auto_test_mode_widgets = {}
-        self.full_test_mode_widgets = {} 
+        self.full_test_mode_widgets = {}
         self.syntactic_mode_widgets = {}
         self.syntactic_test_mode_widgets = {}
         self.integrated_mode_widgets = {}
@@ -90,7 +90,7 @@ class LexerGeneratorApp(ctk.CTk):
         create_start_screen_frame(self)
         create_manual_mode_frame_widgets(self)
         create_auto_test_mode_frame_widgets(self)
-        create_full_test_mode_frame_widgets(self) 
+        create_full_test_mode_frame_widgets(self)
         create_syntactic_mode_frame_widgets(self)
         create_syntactic_test_mode_frame_widgets(self)
         create_integrated_mode_frame_widgets(self)
@@ -104,19 +104,19 @@ class LexerGeneratorApp(ctk.CTk):
 
         frame = self.frames[frame_name]
         frame.pack(pady=20, padx=20, fill="both", expand=True)
-        self.current_frame_name = frame_name 
+        self.current_frame_name = frame_name
         
-        if construction_method: 
+        if construction_method:
             self.active_construction_method = construction_method
         elif frame_name == "FullTestMode":
             if hasattr(self, 'full_test_mode_widgets') and self.full_test_mode_widgets.get("method_var"):
                 self.active_construction_method = self.full_test_mode_widgets["method_var"].get()
-            else: 
+            else:
                 self.active_construction_method = "thompson"
-        elif frame_name == "AutoTestMode": 
+        elif frame_name == "AutoTestMode":
             self.active_construction_method = "thompson"
 
-        current_mode_display_name = "Automático" 
+        current_mode_display_name = "Automático"
         if self.current_frame_name == "ManualMode":
             current_mode_display_name = f"Manual ({self.active_construction_method.replace('_', ' ').capitalize()})"
         elif self.current_frame_name == "FullTestMode":
@@ -136,15 +136,15 @@ class LexerGeneratorApp(ctk.CTk):
 
         self.current_test_name = current_mode_display_name
 
-        widgets = self.get_current_mode_widgets() 
-        if widgets and self.current_frame_name not in ["FullTestMode", "StartScreen", "SyntacticMode", "SyntacticTestMode", "IntegratedMode"]: 
+        widgets = self.get_current_mode_widgets()
+        if widgets and self.current_frame_name not in ["FullTestMode", "StartScreen", "SyntacticMode", "SyntacticTestMode", "IntegratedMode"]:
             is_thompson = (self.active_construction_method == "thompson")
             
             combine_btn = widgets.get("combine_nfas_button")
             if combine_btn:
                 if is_thompson:
                     combine_btn.configure(text="B. Unir NFAs & Determinar", command=self.combine_all_nfas, state="disabled")
-                else: 
+                else:
                     combine_btn.configure(text="B. (AFD Direto da Etapa A)", command=lambda: None, state="disabled")
 
             process_btn_text = "A. Processar ERs"
@@ -155,7 +155,7 @@ class LexerGeneratorApp(ctk.CTk):
             if generate_dfa_btn:
                 generate_dfa_btn.configure(text="C. Minimizar AFD")
 
-        if frame_name == "AutoTestMode": 
+        if frame_name == "AutoTestMode":
             if widgets and widgets.get("re_input_textbox") and \
                not widgets["re_input_textbox"].get("1.0", "end-1c").strip() and TEST_CASES:
                 self.load_test_data_for_auto_mode(TEST_CASES[0], show_message=False)
@@ -176,7 +176,7 @@ class LexerGeneratorApp(ctk.CTk):
         if not widgets: return
         widget = widgets.get(widget_key)
         if widget:
-            should_keep_editable = False 
+            should_keep_editable = False
             if self.current_frame_name == "ManualMode":
                 if widget_key in ["re_input_textbox", "source_code_input_textbox"]:
                     should_keep_editable = True
@@ -185,21 +185,21 @@ class LexerGeneratorApp(ctk.CTk):
             pass
 
     def _set_re_definitions_for_current_mode(self, content):
-        re_textbox_key = "re_input_textbox" 
+        re_textbox_key = "re_input_textbox"
         if self.current_frame_name == "FullTestMode":
             re_textbox_key = "re_display_textbox"
         self._update_widget_text(re_textbox_key, content)
         
-        if self.current_frame_name != "FullTestMode": 
+        if self.current_frame_name != "FullTestMode":
             self.reset_app_state()
 
     def _set_source_code_for_current_mode(self, content):
-        source_textbox_key = "source_code_input_textbox" 
+        source_textbox_key = "source_code_input_textbox"
         if self.current_frame_name == "FullTestMode":
             source_textbox_key = "source_display_textbox"
         self._update_widget_text(source_textbox_key, content)
 
-        if self.dfa and self.current_frame_name != "FullTestMode": 
+        if self.dfa and self.current_frame_name != "FullTestMode":
             widgets = self.get_current_mode_widgets()
             update_display_tab(widgets, "Saída do Analisador Léxico (Tokens)", f"({self.current_test_name}: Texto fonte alterado, reanalisar)")
 
@@ -218,7 +218,7 @@ class LexerGeneratorApp(ctk.CTk):
         widgets = self.get_current_mode_widgets()
         if not widgets: return
 
-        for tab_name_key in widgets.get("textboxes_map", {}): 
+        for tab_name_key in widgets.get("textboxes_map", {}):
             if tab_name_key == "Tabela de Símbolos (Definições & Dinâmica)":
                 update_display_tab(widgets, tab_name_key, "Tabela de Símbolos (Definições Estáticas):\n(Aguardando processamento de REs)")
             else:
@@ -226,7 +226,7 @@ class LexerGeneratorApp(ctk.CTk):
         
         clear_dfa_image(widgets)
         
-        if self.current_frame_name not in ["FullTestMode", "StartScreen", "SyntacticTestMode"]: 
+        if self.current_frame_name not in ["FullTestMode", "StartScreen", "SyntacticTestMode"]:
             if widgets.get("process_re_button"): widgets["process_re_button"].configure(state="normal")
             for btn_key in ["combine_nfas_button", "generate_dfa_button", "draw_dfa_button", "save_dfa_button", "tokenize_button"]:
                 if widgets.get(btn_key): widgets[btn_key].configure(state="disabled")
@@ -261,11 +261,6 @@ class LexerGeneratorApp(ctk.CTk):
             ts_builder.append("  (Nenhum)")
             
         update_display_tab(widgets, "Tabela de Símbolos (Definições & Dinâmica)", "\n".join(ts_builder))
-        if widgets.get("display_tab_view"):
-            try:
-                widgets["display_tab_view"].set("Tabela de Símbolos (Definições & Dinâmica)")
-            except Exception:
-                pass
 
     def run_full_test_case(self, test_case):
         current_widgets_for_full_test = self.full_test_mode_widgets
@@ -276,7 +271,7 @@ class LexerGeneratorApp(ctk.CTk):
         self.active_construction_method = current_widgets_for_full_test["method_var"].get()
         self.current_test_name = f"{test_case['name']} ({self.active_construction_method.replace('_',' ').capitalize()})"
 
-        self.reset_app_state() 
+        self.reset_app_state()
 
         update_text_content(current_widgets_for_full_test.get("re_display_textbox"), test_case["re_definitions"], keep_editable=False)
         update_text_content(current_widgets_for_full_test.get("source_display_textbox"), test_case["source_code"], keep_editable=False)
@@ -290,24 +285,24 @@ class LexerGeneratorApp(ctk.CTk):
         messagebox.showinfo("Teste Completo Iniciado", f"Executando teste completo para: {test_case['name']}\nMétodo: {self.active_construction_method.capitalize()}")
 
         try:
-            self.process_regular_expressions() 
+            self.process_regular_expressions()
             
             if self.active_construction_method == "thompson":
                 if self.individual_nfas and any(self.individual_nfas.values()):
-                    self.combine_all_nfas() 
+                    self.combine_all_nfas()
                 else:
                     messagebox.showwarning("Teste Completo", "Nenhum NFA válido gerado na Etapa A para Thompson. Interrompendo.")
                     return
             
             if self.unminimized_dfa:
-                self.generate_final_dfa_and_minimize() 
+                self.generate_final_dfa_and_minimize()
             else:
                  messagebox.showwarning("Teste Completo", "Nenhum AFD não minimizado gerado. Não é possível minimizar ou analisar. Interrompendo.")
                  return
 
             if self.dfa:
-                self.draw_current_minimized_dfa() 
-                self.tokenize_source() 
+                self.draw_current_minimized_dfa()
+                self.tokenize_source()
                 messagebox.showinfo("Teste Completo Concluído", f"Teste '{test_case['name']}' ({self.active_construction_method.capitalize()}) concluído com sucesso.")
             else:
                  messagebox.showwarning("Teste Completo", "Nenhum AFD minimizado final gerado. Interrompendo antes de desenhar/tokenizar.")

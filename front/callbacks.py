@@ -53,7 +53,7 @@ def process_regular_expressions_callback(app_instance):
             messagebox.showerror("Erro Interno", "Textbox de input de RE não encontrado.")
             return
         re_content_for_parsing = re_input_tb.get("1.0", "end-1c").strip()
-        if not re_content_for_parsing: 
+        if not re_content_for_parsing:
             messagebox.showerror("Entrada Vazia", "Nenhuma definição regular fornecida."); return
         
         try:
@@ -72,9 +72,9 @@ def process_regular_expressions_callback(app_instance):
     
     try:
         if app_instance.active_construction_method == "thompson":
-            NFA.reset_state_ids() 
-            DFA._next_dfa_id = 0 
-            DFA._state_map = {}  
+            NFA.reset_state_ids()
+            DFA._next_dfa_id = 0
+            DFA._state_map = {}
             has_any_valid_nfa = False
             for name in app_instance.pattern_order:
                 regex_str = app_instance.definitions.get(name, "")
@@ -85,19 +85,19 @@ def process_regular_expressions_callback(app_instance):
                     postfix_expr_str_display = "".join(postfix_expr_tokens)
                     construction_details_builder.append(f"  Pós-fixada: {postfix_expr_str_display if postfix_expr_str_display else '(VAZIA)'}\n")
                     nfa = postfix_to_nfa(postfix_expr_tokens)
-                    if nfa: 
+                    if nfa:
                         app_instance.individual_nfas[name] = nfa
                         construction_details_builder.append(get_nfa_details_str(nfa, f"NFA para '{name}'") + "\n\n")
                         has_any_valid_nfa = True
                     else: construction_details_builder.append("  NFA: (Não gerado)\n\n")
                 except Exception as ve_re: construction_details_builder.append(f"  ERRO NFA '{name}': {ve_re}\n\n")
             process_successful = has_any_valid_nfa
-            if process_successful and widgets.get("combine_nfas_button") and app_instance.current_frame_name != "FullTestMode": 
+            if process_successful and widgets.get("combine_nfas_button") and app_instance.current_frame_name != "FullTestMode":
                 widgets["combine_nfas_button"].configure(state="normal")
 
         elif app_instance.active_construction_method == "tree_direct_dfa":
-            DFA._next_dfa_id = 0 
-            DFA._state_map = {}  
+            DFA._next_dfa_id = 0
+            DFA._state_map = {}
             
             if not app_instance.pattern_order or not app_instance.definitions:
                 update_display_tab(widgets, "ER ➔ NFA Ind. / Árvore+Followpos", "Nenhuma definição de RE para Followpos.")
@@ -106,7 +106,7 @@ def process_regular_expressions_callback(app_instance):
                 return
 
             direct_dfa, aug_tree, pos_map, pseudo_nfa_union_display = regex_to_direct_dfa(
-                app_instance.definitions, 
+                app_instance.definitions,
                 app_instance.pattern_order
             )
             
@@ -126,12 +126,12 @@ def process_regular_expressions_callback(app_instance):
             update_display_tab(widgets, "NFA Combinado (União ε) / AFD Direto (Não-Minim.)", "\n".join(followpos_nfa_union_tab_content))
 
             if direct_dfa and aug_tree and pos_map:
-                app_instance.unminimized_dfa = direct_dfa 
+                app_instance.unminimized_dfa = direct_dfa
                 app_instance.augmented_syntax_tree_followpos = aug_tree
                 app_instance.followpos_table_followpos = pos_map
                 
                 construction_details_builder.append(f"Construindo AFD Direto (Followpos) para TODAS as definições:\n")
-                construction_details_builder.append(f"  Árvore Aumentada Combinada:\n{aug_tree}\n") 
+                construction_details_builder.append(f"  Árvore Aumentada Combinada:\n{aug_tree}\n")
                 
                 fp_details = ["  Tabela Followpos (Consolidada):"]
                 sorted_pos_ids = sorted(pos_map.keys())
@@ -142,16 +142,14 @@ def process_regular_expressions_callback(app_instance):
                 construction_details_builder.append("\n".join(fp_details) + "\n")
                 
                 process_successful = True
-            else: 
+            else:
                 construction_details_builder.append(f"  Falha ao gerar árvore ou followpos para AFD direto consolidado.\n")
             
-            if process_successful and direct_dfa and widgets.get("generate_dfa_button") and app_instance.current_frame_name != "FullTestMode": 
+            if process_successful and direct_dfa and widgets.get("generate_dfa_button") and app_instance.current_frame_name != "FullTestMode":
                 widgets["generate_dfa_button"].configure(state="normal")
         
         update_display_tab(widgets, "ER ➔ NFA Ind. / Árvore+Followpos", "".join(construction_details_builder))
-        if widgets.get("display_tab_view") and app_instance.current_frame_name != "FullTestMode": 
-             widgets["display_tab_view"].set("ER ➔ NFA Ind. / Árvore+Followpos")
-        
+
         if app_instance.current_frame_name != "FullTestMode":
             if not process_successful:
                  messagebox.showwarning("Processamento Parcial/Falha", f"({app_instance.current_test_name}): Verifique os detalhes. Algumas etapas podem ter falhado.")
@@ -174,7 +172,7 @@ def combine_all_nfas_callback(app_instance):
     if not nfas_for_combination: messagebox.showerror("Sem NFAs Válidos", "Nenhum NFA individual válido para combinar."); return
     
     try:
-        DFA._next_dfa_id = 0 
+        DFA._next_dfa_id = 0
         DFA._state_map = {}
 
         app_instance.combined_nfa_start_obj, app_instance.combined_nfa_accept_map, app_instance.combined_nfa_alphabet = combine_nfas(nfas_for_combination)
@@ -192,9 +190,8 @@ def combine_all_nfas_callback(app_instance):
         display_str_builder.append(get_dfa_table_str(app_instance.unminimized_dfa, title_prefix="AFD Não Minimizado (Após Determinização): "))
 
         update_display_tab(widgets, "NFA Combinado (União ε) / AFD Direto (Não-Minim.)", "\n".join(display_str_builder))
-        if widgets.get("display_tab_view") and app_instance.current_frame_name != "FullTestMode":
-            widgets["display_tab_view"].set("NFA Combinado (União ε) / AFD Direto (Não-Minim.)")
-        if widgets.get("generate_dfa_button") and app_instance.current_frame_name != "FullTestMode": 
+
+        if widgets.get("generate_dfa_button") and app_instance.current_frame_name != "FullTestMode":
             widgets["generate_dfa_button"].configure(state="normal")
         if app_instance.current_frame_name != "FullTestMode":
             messagebox.showinfo("Sucesso (Etapa B - Thompson)", "NFAs combinados e AFD não minimizado gerado.")
@@ -208,12 +205,12 @@ def generate_final_dfa_and_minimize_callback(app_instance):
     widgets = app_instance.get_current_mode_widgets()
     if not widgets: return
 
-    app_instance.dfa = None 
+    app_instance.dfa = None
     dfa_tables_display_builder = []
     
     try:
         if not app_instance.unminimized_dfa:
-            if app_instance.current_frame_name != "FullTestMode": 
+            if app_instance.current_frame_name != "FullTestMode":
                 messagebox.showerror("Processo Incompleto", "O AFD não minimizado (da Etapa B ou A-Followpos) não foi gerado.")
             return
 
@@ -223,8 +220,6 @@ def generate_final_dfa_and_minimize_callback(app_instance):
         dfa_tables_display_builder.append(get_dfa_table_str(app_instance.dfa, title_prefix="AFD Minimizado (Final): "))
         
         update_display_tab(widgets, "AFD Minimizado (Final)", "\n\n====================\n\n".join(dfa_tables_display_builder))
-        if widgets.get("display_tab_view") and app_instance.current_frame_name != "FullTestMode":
-             widgets["display_tab_view"].set("AFD Minimizado (Final)")
         
         app_instance.lexer = Lexer(app_instance.dfa, app_instance.reserved_words_defs, app_instance.patterns_to_ignore, app_instance.symbol_table_instance)
 
@@ -256,7 +251,7 @@ def draw_current_minimized_dfa_callback(app_instance):
         return
     
     test_name_slug = "".join(c if c.isalnum() else "_" for c in app_instance.current_test_name)
-    if not test_name_slug: test_name_slug = "default_test" 
+    if not test_name_slug: test_name_slug = "default_test"
     filename_prefix = f"dfa_graph_{test_name_slug}"
     
     try:
@@ -274,12 +269,12 @@ def draw_current_minimized_dfa_callback(app_instance):
                     if "Desenho AFD Minimizado" in tab_view_widget._name_list:
                         tab_index = tab_view_widget._name_list.index("Desenho AFD Minimizado")
                         tab_widget_for_drawing = tab_view_widget._tab_dict["Desenho AFD Minimizado"]
-                    else: 
-                        tab_widget_for_drawing = tab_view_widget 
-                 except (AttributeError, ValueError, KeyError): 
-                    tab_widget_for_drawing = tab_view_widget 
+                    else:
+                        tab_widget_for_drawing = tab_view_widget
+                 except (AttributeError, ValueError, KeyError):
+                    tab_widget_for_drawing = tab_view_widget
 
-            max_tab_width = tab_widget_for_drawing.winfo_width() if tab_widget_for_drawing and tab_widget_for_drawing.winfo_width() > 20 else 700 
+            max_tab_width = tab_widget_for_drawing.winfo_width() if tab_widget_for_drawing and tab_widget_for_drawing.winfo_width() > 20 else 700
             max_tab_height = tab_widget_for_drawing.winfo_height() if tab_widget_for_drawing and tab_widget_for_drawing.winfo_height() > 20 else 500
 
             img_aspect_ratio = original_width / original_height if original_height > 0 else 1
@@ -293,27 +288,27 @@ def draw_current_minimized_dfa_callback(app_instance):
             
             if new_height > max_tab_height:
                 new_height = max_tab_height
-                new_width = int(new_height * img_aspect_ratio) if img_aspect_ratio != 0 else max_tab_width 
+                new_width = int(new_height * img_aspect_ratio) if img_aspect_ratio != 0 else max_tab_width
 
             if new_width > max_tab_width:
                 new_width = max_tab_width
                 new_height = int(new_width / img_aspect_ratio) if img_aspect_ratio != 0 else max_tab_height
 
-            new_width = max(1, int(new_width)) 
-            new_height = max(1, int(new_height)) 
+            new_width = max(1, int(new_width))
+            new_height = max(1, int(new_height))
 
             resized_image = pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
             ctk_image = ctk.CTkImage(light_image=resized_image, dark_image=resized_image, size=(resized_image.width, resized_image.height))
             
             if dfa_img_label_current:
-                dfa_img_label_current.configure(image=ctk_image, text="") 
-                dfa_img_label_current.image = ctk_image 
+                dfa_img_label_current.configure(image=ctk_image, text="")
+                dfa_img_label_current.image = ctk_image
             
             if tab_view_widget and "Desenho AFD Minimizado" in tab_view_widget._name_list:
                 try:
                     tab_view_widget.set("Desenho AFD Minimizado")
-                except Exception: 
-                    pass 
+                except Exception:
+                    pass
             if app_instance.current_frame_name != "FullTestMode":
                 messagebox.showinfo("Desenho AFD", f"Desenho do AFD exibido e salvo em:\n{image_path}")
         else:
@@ -376,7 +371,6 @@ def process_grammar_callback(app_instance):
         update_display_tab(widgets, "Tabela de Análise SLR", get_slr_table_str(action_table, goto_table, app_instance.grammar))
 
         widgets["parse_button"].configure(state="normal")
-        widgets["display_tab_view"].set("Tabela de Análise SLR")
         messagebox.showinfo("Sucesso", "Gramática processada e Tabela SLR gerada com sucesso.")
 
     except Exception as e:
@@ -437,9 +431,9 @@ def run_parser_callback(app_instance):
 def tokenize_source_callback(app_instance):
     widgets = app_instance.get_current_mode_widgets()
     if not widgets: return
-    if not app_instance.lexer: 
+    if not app_instance.lexer:
         if app_instance.current_frame_name != "FullTestMode":
-            messagebox.showerror("Lexer Indisponível", "Analisador Léxico não gerado. Execute todas as etapas de construção primeiro."); 
+            messagebox.showerror("Lexer Indisponível", "Analisador Léxico não gerado. Execute todas as etapas de construção primeiro.");
         return
     
     source_code = ""
@@ -450,8 +444,8 @@ def tokenize_source_callback(app_instance):
         source_code_tb = widgets.get("source_code_input_textbox")
         if source_code_tb: source_code = source_code_tb.get("1.0", "end-1c")
 
-    if not source_code: 
-        update_display_tab(widgets, "Saída do Analisador Léxico (Tokens)", "(Nenhum texto fonte)"); 
+    if not source_code:
+        update_display_tab(widgets, "Saída do Analisador Léxico (Tokens)", "(Nenhum texto fonte)");
         update_display_tab(widgets, "Tabela de Símbolos (Definições & Dinâmica)", "Tabela de Símbolos (Dinâmica):\n(Nenhum texto fonte para analisar)")
         return
     
@@ -459,7 +453,7 @@ def tokenize_source_callback(app_instance):
         tokens_data_list, populated_symbol_table = app_instance.lexer.tokenize(source_code)
         
         output_lines = [f"Tokens Gerados ({app_instance.current_test_name} - com AFD Minimizado):\n"]
-        if not tokens_data_list: 
+        if not tokens_data_list:
             output_lines.append("(Nenhum token reconhecido)")
         else:
             for lexema, token_type, attribute in tokens_data_list:
@@ -481,8 +475,8 @@ def tokenize_source_callback(app_instance):
             if "Tabela de Símbolos (Dinâmica" in current_ts_content:
                 ts_static_part = current_ts_content.split("\n\nTabela de Símbolos (Dinâmica")[0]
             elif "Definições de Padrões e Palavras Reservadas (Estático):" in current_ts_content:
-                 ts_static_part = current_ts_content 
-        if not ts_static_part.strip(): 
+                 ts_static_part = current_ts_content
+        if not ts_static_part.strip():
             ts_static_part = "Definições de Padrões e Palavras Reservadas (Estático):\n(Não exibido ou recarregado)"
 
 
@@ -490,9 +484,6 @@ def tokenize_source_callback(app_instance):
         ts_dynamic_str += str(populated_symbol_table)
         update_display_tab(widgets, "Tabela de Símbolos (Definições & Dinâmica)", ts_static_part + ts_dynamic_str)
 
-
-        if widgets.get("display_tab_view") and app_instance.current_frame_name != "FullTestMode":
-             widgets["display_tab_view"].set("Saída do Analisador Léxico (Tokens)")
     except Exception as e:
         tb_str = traceback.format_exc()
         error_message = f"({app_instance.current_test_name}): {type(e).__name__}: {str(e)}\n\nTraceback:\n{tb_str}"
